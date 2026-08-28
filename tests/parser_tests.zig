@@ -132,3 +132,19 @@ test "parser: trailing semicolon is allowed" {
     defer result.deinit(allocator);
     try testing.expectEqual(@as(u32, 1), result.byte_length);
 }
+
+test "parser: iterator ref as loop body statement compiles" {
+    const allocator = testing.allocator;
+    // <i> is substituted by the loop and emitted as a push per iteration.
+    const result = try bsvz_macro.compile(allocator, "LOOP[3]{ <i> }", .{});
+    defer result.deinit(allocator);
+    try testing.expectEqual(@as(u32, 3), result.byte_length);
+}
+
+test "parser: iterator ref inside macro argument compiles" {
+    const allocator = testing.allocator;
+    // RANGE_CHECK[<i>,100] substitutes <i> per iteration (0..n-1).
+    const result = try bsvz_macro.compile(allocator, "LOOP[3]{ RANGE_CHECK[<i>,100] }", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+}

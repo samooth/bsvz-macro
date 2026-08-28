@@ -49,10 +49,18 @@ pub const Parser = struct {
         if (self.check(.at)) {
             return self.parseConditional();
         }
+        if (self.check(.iterator_var)) {
+            return self.parseIteratorRef();
+        }
         if (self.check(.l_brace)) {
             return self.parseBlock();
         }
         return ParseError.UnexpectedToken;
+    }
+
+    fn parseIteratorRef(self: *Parser) ParseError!AstNode {
+        const tok = self.advance();
+        return .{ .iterator_ref = try self.allocator.dupe(u8, tok.token.iterator_var) };
     }
 
     fn parseOpcodeLiteral(self: *Parser) AstNode {
@@ -181,6 +189,10 @@ pub const Parser = struct {
     }
 
     fn parseArg(self: *Parser) ParseError!AstNode {
+        if (self.check(.iterator_var)) {
+            const tok = self.advance();
+            return .{ .iterator_ref = try self.allocator.dupe(u8, tok.token.iterator_var) };
+        }
         if (self.check(.integer)) {
             const tok = self.advance();
             return .{ .integer_literal = tok.token.integer };

@@ -442,6 +442,45 @@ test "property: conditional branch selection is target-exhaustive" {
     try testing.expectEqualSlices(u8, btc_expected.bytecode, btc.bytecode);
 }
 
+test "property: iterator ref in macro arg expands per iteration" {
+    const allocator = testing.allocator;
+    // LOOP[n]{ RANGE_CHECK[<i>,100] } must expand to the exact concatenation of
+    // RANGE_CHECK[0,100], RANGE_CHECK[1,100], ... RANGE_CHECK[n-1,100].
+    // This exercises iterator-variable substitution through a macro argument.
+    for ([_]u64{ 1, 2, 3, 4 }) |n| {
+        var loop_src: [128]u8 = undefined;
+        const loop_slice = try std.fmt.bufPrint(&loop_src, "LOOP[{}]{{ RANGE_CHECK[<i>,100] }}", .{n});
+        const loop_res = try bsvz_macro.compile(allocator, loop_slice, .{});
+        defer loop_res.deinit(allocator);
+
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(allocator);
+        var i: u64 = 0;
+        while (i < n) : (i += 1) {
+            var part_src: [64]u8 = undefined;
+            const part_slice = try std.fmt.bufPrint(&part_src, "RANGE_CHECK[{},100]", .{i});
+            const part = try bsvz_macro.compile(allocator, part_slice, .{});
+            defer part.deinit(allocator);
+            try expected.appendSlice(allocator, part.bytecode);
+        }
+
+        try testing.expectEqualSlices(u8, expected.items, loop_res.bytecode);
+    }
+}
+
+test "property: iterator ref as statement emits one push per iteration" {
+    const allocator = testing.allocator;
+    // LOOP[n]{ <i> } emits a push of 0, 1, ... n-1. For n <= 17 each push is a
+    // single byte, so the expanded length equals n.
+    for ([_]u64{ 1, 2, 3, 4, 5, 10, 16 }) |n| {
+        var loop_src: [128]u8 = undefined;
+        const loop_slice = try std.fmt.bufPrint(&loop_src, "LOOP[{}]{{ <i> }}", .{n});
+        const loop_res = try bsvz_macro.compile(allocator, loop_slice, .{});
+        defer loop_res.deinit(allocator);
+        try testing.expectEqual(@as(u32, @intCast(n)), loop_res.byte_length);
+    }
+}
+
 test "property: randomized compilable sources are deterministic" {
     const allocator = testing.allocator;
     // Generate random scripts from a safe opcode alphabet (opcodes that only

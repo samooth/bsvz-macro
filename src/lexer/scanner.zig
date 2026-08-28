@@ -56,7 +56,7 @@ pub const Scanner = struct {
             ';' => { self.advance(); return self.makeTok(.semicolon, start_line, start_col, start_offset, 1); },
             ',' => { self.advance(); return self.makeTok(.comma, start_line, start_col, start_offset, 1); },
             '@' => { self.advance(); return self.makeTok(.at, start_line, start_col, start_offset, 1); },
-            '<' => return self.scanIteratorVar(start_line, start_col, start_offset),
+            '<' => return self.scanIteratorVar(allocator, start_line, start_col, start_offset),
             '"' => return self.scanQuotedString(allocator, start_line, start_col, start_offset),
             '0'...'9', '-' => return self.scanNumber(start_line, start_col, start_offset),
             'A'...'Z', 'a'...'z', '_' => return self.scanIdentifier(allocator, start_line, start_col, start_offset),
@@ -181,14 +181,14 @@ pub const Scanner = struct {
         return self.makeTok(.{ .string = str_content }, line, col, offset, @intCast(len));
     }
 
-    fn scanIteratorVar(self: *Scanner, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
+    fn scanIteratorVar(self: *Scanner, allocator: std.mem.Allocator, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
         self.advance(); // skip <
         const start = self.pos;
         while (self.pos < self.source.len and self.source[self.pos] != '>') {
             self.advance();
         }
         if (self.pos >= self.source.len) return LexError.UnrecognizedToken;
-        const var_name = self.source[start..self.pos];
+        const var_name = try allocator.dupe(u8, self.source[start..self.pos]);
         self.advance(); // skip >
         const len = self.pos - offset;
         return self.makeTok(.{ .iterator_var = var_name }, line, col, offset, @intCast(len));
