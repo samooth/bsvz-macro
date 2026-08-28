@@ -87,8 +87,16 @@ pub fn compile(
 
     // Phase 5: Simulate
     const SymbolicEngine = simulator.SymbolicEngine;
+    const StackType = @import("simulator/stack.zig").StackType;
     var engine = SymbolicEngine.init(allocator);
     defer engine.deinit();
+
+    // Pre-populate stack with dummy items for macro expansion simulation
+    // Macros are meant to be used with existing stack items
+    for (0..4) |_| {
+        try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 0 } });
+    }
+
     const sim_report = engine.simulate(bytecode, options.max_stack_elements) catch |e| {
         allocator.free(bytecode);
         return switch (e) {

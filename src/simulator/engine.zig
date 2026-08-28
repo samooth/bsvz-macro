@@ -179,7 +179,9 @@ pub const SymbolicEngine = struct {
             .OP_CAT => {
                 const item1 = try self.main_stack.pop();
                 const item2 = try self.main_stack.pop();
-                const new_len = item1.type.bytes + item2.type.bytes;
+                const len1: u32 = if (std.meta.activeTag(item1.type) == .bytes) item1.type.bytes else 0;
+                const len2: u32 = if (std.meta.activeTag(item2.type) == .bytes) item2.type.bytes else 0;
+                const new_len = len1 + len2;
                 if (new_len > 520) return SimError.PushTooLarge;
                 try self.main_stack.push(a, .{ .type = StackType{ .bytes = new_len } });
             },
