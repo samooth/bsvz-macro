@@ -21,11 +21,11 @@ pub const Scanner = struct {
 
         while (true) {
             const tok = try self.nextToken(allocator);
-            try tokens.append(tok);
+            try tokens.append(allocator, tok);
             if (tok.token == .eof) break;
         }
 
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(allocator);
     }
 
     fn nextToken(self: *Scanner, allocator: std.mem.Allocator) LexError!TokenWithLoc {
@@ -40,7 +40,7 @@ pub const Scanner = struct {
                 .token = .eof,
                 .line = start_line,
                 .column = start_col,
-                .offset = start_offset,
+                .offset = @intCast(start_offset),
                 .length = 0,
             };
         }
@@ -64,13 +64,13 @@ pub const Scanner = struct {
         }
     }
 
-    fn makeTok(self: *Scanner, token: Token, line: u32, col: u32, offset: u32, length: u32) TokenWithLoc {
+    fn makeTok(self: *Scanner, token: Token, line: u32, col: u32, offset: usize, length: u32) TokenWithLoc {
         _ = self;
         return .{
             .token = token,
             .line = line,
             .column = col,
-            .offset = offset,
+            .offset = @intCast(offset),
             .length = length,
         };
     }
@@ -124,7 +124,7 @@ pub const Scanner = struct {
         }
     }
 
-    fn scanNumber(self: *Scanner, line: u32, col: u32, offset: u32) LexError!TokenWithLoc {
+    fn scanNumber(self: *Scanner, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
         const start = self.pos;
         var negative = false;
         if (self.source[self.pos] == '-') {
@@ -167,7 +167,7 @@ pub const Scanner = struct {
         return self.makeTok(.{ .integer = value }, line, col, offset, @intCast(len));
     }
 
-    fn scanQuotedString(self: *Scanner, allocator: std.mem.Allocator, line: u32, col: u32, offset: u32) LexError!TokenWithLoc {
+    fn scanQuotedString(self: *Scanner, allocator: std.mem.Allocator, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
         _ = allocator;
         self.advance(); // skip opening "
         const start = self.pos;
@@ -181,7 +181,7 @@ pub const Scanner = struct {
         return self.makeTok(.{ .string = str_content }, line, col, offset, @intCast(len));
     }
 
-    fn scanIteratorVar(self: *Scanner, line: u32, col: u32, offset: u32) LexError!TokenWithLoc {
+    fn scanIteratorVar(self: *Scanner, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
         self.advance(); // skip <
         const start = self.pos;
         while (self.pos < self.source.len and self.source[self.pos] != '>') {
@@ -194,7 +194,7 @@ pub const Scanner = struct {
         return self.makeTok(.{ .iterator_var = var_name }, line, col, offset, @intCast(len));
     }
 
-    fn scanIdentifier(self: *Scanner, allocator: std.mem.Allocator, line: u32, col: u32, offset: u32) LexError!TokenWithLoc {
+    fn scanIdentifier(self: *Scanner, allocator: std.mem.Allocator, line: u32, col: u32, offset: usize) LexError!TokenWithLoc {
         const start = self.pos;
         while (self.pos < self.source.len) {
             const c = self.source[self.pos];
@@ -297,8 +297,6 @@ fn opcodeFromName(name: []const u8) ?Opcode {
         .{ "OP_RESERVED2", Opcode.OP_RESERVED2 },
         .{ "OP_1ADD", Opcode.OP_1ADD },
         .{ "OP_1SUB", Opcode.OP_1SUB },
-        .{ "OP_2MUL", Opcode.OP_2MUL },
-        .{ "OP_2DIV", Opcode.OP_2DIV },
         .{ "OP_NEGATE", Opcode.OP_NEGATE },
         .{ "OP_ABS", Opcode.OP_ABS },
         .{ "OP_NOT", Opcode.OP_NOT },
@@ -342,11 +340,20 @@ fn opcodeFromName(name: []const u8) ?Opcode {
         .{ "OP_NOP8", Opcode.OP_NOP8 },
         .{ "OP_NOP9", Opcode.OP_NOP9 },
         .{ "OP_NOP10", Opcode.OP_NOP10 },
-        .{ "OP_LSHIFTNUM", Opcode.OP_LSHIFTNUM },
-        .{ "OP_RSHIFTNUM", Opcode.OP_RSHIFTNUM },
-        .{ "OP_SUBSTR", Opcode.OP_SUBSTR },
-        .{ "OP_LEFT", Opcode.OP_LEFT },
-        .{ "OP_RIGHT", Opcode.OP_RIGHT },
+        .{ "OP_INVERT", Opcode.OP_INVERT },
+        .{ "OP_AND", Opcode.OP_AND },
+        .{ "OP_OR", Opcode.OP_OR },
+        .{ "OP_XOR", Opcode.OP_XOR },
+        .{ "OP_EQUAL", Opcode.OP_EQUAL },
+        .{ "OP_EQUALVERIFY", Opcode.OP_EQUALVERIFY },
+        .{ "OP_HASH160", Opcode.OP_HASH160 },
+        .{ "OP_HASH256", Opcode.OP_HASH256 },
+        .{ "OP_CHECKSIG", Opcode.OP_CHECKSIG },
+        .{ "OP_CHECKSIGVERIFY", Opcode.OP_CHECKSIGVERIFY },
+        .{ "OP_CHECKMULTISIG", Opcode.OP_CHECKMULTISIG },
+        .{ "OP_CHECKMULTISIGVERIFY", Opcode.OP_CHECKMULTISIGVERIFY },
+        .{ "OP_VERIFY", Opcode.OP_VERIFY },
+        .{ "OP_RETURN", Opcode.OP_RETURN },
     };
 
     inline for (map) |entry| {

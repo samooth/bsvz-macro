@@ -7,5 +7,6 @@ pub const SimError = error{
     InvalidStackIndex,
     DivisionByZero,
     VerifyFailed,
+    InvalidOpcode,
     OutOfMemory,
 };

@@ -55,7 +55,7 @@ pub const Expander = struct {
             },
             .integer_literal => |val| {
                 var out = std.ArrayListUnmanaged(u8){};
-                try emitMinimalPushInt(&out, allocator, val);
+                emitMinimalPushInt(&out, allocator, val) catch return ExpandError.TypeMismatch;
                 return out.toOwnedSlice(allocator);
             },
             .string_literal => |str| {
@@ -67,9 +67,9 @@ pub const Expander = struct {
                     const decoded = try allocator.alloc(u8, hex_str.len / 2);
                     defer allocator.free(decoded);
                     _ = std.fmt.hexToBytes(decoded, hex_str) catch return ExpandError.TypeMismatch;
-                    try builder.appendPushData(&out, allocator, decoded);
+                    builder.appendPushData(&out, allocator, decoded) catch return ExpandError.TypeMismatch;
                 } else {
-                    try builder.appendPushData(&out, allocator, str);
+                    builder.appendPushData(&out, allocator, str) catch return ExpandError.TypeMismatch;
                 }
                 return out.toOwnedSlice(allocator);
             },
@@ -122,7 +122,7 @@ pub const Expander = struct {
         }
 
         // Expand args to literal values for the macro function
-        var expanded_args = std.ArrayList(AstNode).init(allocator);
+        var expanded_args: std.ArrayList(AstNode) = .empty;
         defer {
             for (expanded_args.items) |arg| {
                 switch (arg) {
@@ -130,13 +130,13 @@ pub const Expander = struct {
                     else => {},
                 }
             }
-            expanded_args.deinit();
+            expanded_args.deinit(allocator);
         }
 
         for (args) |arg| {
             switch (arg) {
-                .integer_literal, .opcode_literal => try expanded_args.append(arg),
-                .string_literal => |s| try expanded_args.append(.{ .string_literal = try allocator.dupe(u8, s) }),
+                .integer_literal, .opcode_literal => try expanded_args.append(allocator, arg),
+                .string_literal => |s| try expanded_args.append(allocator, .{ .string_literal = try allocator.dupe(u8, s) }),
                 else => return ExpandError.TypeMismatch,
             }
         }
@@ -186,7 +186,7 @@ pub const Expander = struct {
     }
 };
 
-fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) !void {
+fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) (std.mem.Allocator.Error || error{ InvalidOpcodeType, DataTooBig })!void {
     if (value == 0) {
         try out.append(allocator, Opcode.OP_0.toByte());
     } else if (value >= 1 and value <= 16) {
@@ -213,19 +213,19 @@ fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Alloc
     }
 }
 
-fn substituteIterator(allocator: std.mem.Allocator, nodes: []const AstNode, var_name: []const u8, value: usize) ![]const AstNode {
-    var result = std.ArrayList(AstNode).init(allocator);
-    defer result.deinit();
+fn substituteIterator(allocator: std.mem.Allocator, nodes: []const AstNode, var_name: []const u8, value: usize) ExpandError![]const AstNode {
+    var result: std.ArrayList(AstNode) = .empty;
+    defer result.deinit(allocator);
 
     for (nodes) |node| {
         const new_node = try substituteNode(allocator, node, var_name, value);
-        try result.append(new_node);
+        try result.append(allocator, new_node);
     }
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
-fn substituteNode(allocator: std.mem.Allocator, node: AstNode, var_name: []const u8, value: usize) !AstNode {
+fn substituteNode(allocator: std.mem.Allocator, node: AstNode, var_name: []const u8, value: usize) ExpandError!AstNode {
     switch (node) {
         .iterator_ref => |ref| {
             if (std.mem.eql(u8, ref, var_name)) {
@@ -234,10 +234,10 @@ fn substituteNode(allocator: std.mem.Allocator, node: AstNode, var_name: []const
             return .{ .iterator_ref = try allocator.dupe(u8, ref) };
         },
         .macro_invocation => |m| {
-            var new_args = std.ArrayList(AstNode).init(allocator);
-            defer new_args.deinit();
+            var new_args: std.ArrayList(AstNode) = .empty;
+            defer new_args.deinit(allocator);
             for (m.args) |arg| {
-                try new_args.append(try substituteNode(allocator, arg, var_name, value));
+                try new_args.append(allocator, try substituteNode(allocator, arg, var_name, value));
             }
             var new_body: ?[]const AstNode = null;
             if (m.body) |body| {
@@ -246,7 +246,7 @@ fn substituteNode(allocator: std.mem.Allocator, node: AstNode, var_name: []const
             return .{
                 .macro_invocation = .{
                     .name = try allocator.dupe(u8, m.name),
-                    .args = try new_args.toOwnedSlice(),
+                    .args = try new_args.toOwnedSlice(allocator),
                     .body = new_body,
                 },
             };

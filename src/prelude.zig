@@ -11,7 +11,7 @@ fn emitOpcode(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, op
     try out.append(allocator, op.toByte());
 }
 
-fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) !void {
+fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) (std.mem.Allocator.Error || error{ InvalidOpcodeType, DataTooBig })!void {
     if (value == 0) {
         try out.append(allocator, Opcode.OP_0.toByte());
     } else if (value >= 1 and value <= 16) {
@@ -46,9 +46,9 @@ fn xswapExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]con
     if (n < 1) return ExpandError.TypeMismatch;
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
-    try emitMinimalPushInt(&out, allocator, n - 1);
+    emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_PICK);
-    try emitMinimalPushInt(&out, allocator, n - 1);
+    emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_ROLL);
     try emitOpcode(&out, allocator, .OP_SWAP);
     try emitOpcode(&out, allocator, .OP_DROP);
@@ -63,7 +63,7 @@ fn xdropExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]con
     if (n < 1) return ExpandError.TypeMismatch;
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
-    try emitMinimalPushInt(&out, allocator, n - 1);
+    emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_ROLL);
     try emitOpcode(&out, allocator, .OP_DROP);
     return out.toOwnedSlice(allocator);
@@ -77,7 +77,7 @@ fn xrotExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]cons
     if (n < 1) return ExpandError.TypeMismatch;
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
-    try emitMinimalPushInt(&out, allocator, n - 1);
+    emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_ROLL);
     return out.toOwnedSlice(allocator);
 }
@@ -125,10 +125,10 @@ fn rangeCheckExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_DUP);
-    try emitMinimalPushInt(&out, allocator, min);
+    emitMinimalPushInt(&out, allocator, min) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_GREATERTHANOREQUAL);
     try emitOpcode(&out, allocator, .OP_SWAP);
-    try emitMinimalPushInt(&out, allocator, max);
+    emitMinimalPushInt(&out, allocator, max) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_LESSTHANOREQUAL);
     try emitOpcode(&out, allocator, .OP_BOOLAND);
     try emitOpcode(&out, allocator, .OP_VERIFY);
@@ -142,7 +142,7 @@ fn p2pkhFromPubkeyExpand(allocator: std.mem.Allocator, args: []const AstNode, bo
     try emitOpcode(&out, allocator, .OP_DUP);
     try emitOpcode(&out, allocator, .OP_HASH160);
     const placeholder = [_]u8{0} ** 20;
-    try builder.appendPushData(&out, allocator, &placeholder);
+    builder.appendPushData(&out, allocator, &placeholder) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_EQUALVERIFY);
     try emitOpcode(&out, allocator, .OP_CHECKSIG);
     return out.toOwnedSlice(allocator);
@@ -183,7 +183,7 @@ fn pushTxFragmentExpand(allocator: std.mem.Allocator, args: []const AstNode, bod
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
     // PUSHTX helper: XSWAP n; CAT; HASH256
-    try emitMinimalPushInt(&out, allocator, n);
+    emitMinimalPushInt(&out, allocator, n) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_PICK);
     try emitOpcode(&out, allocator, .OP_CAT);
     try emitOpcode(&out, allocator, .OP_HASH256);

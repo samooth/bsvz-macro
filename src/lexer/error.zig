@@ -7,4 +7,5 @@ pub const LexError = error{
     UnclosedString,
     UnclosedComment,
     IteratorOutsideLoop,
+    OutOfMemory,
 };

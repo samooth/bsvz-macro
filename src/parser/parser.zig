@@ -19,12 +19,12 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) ParseError![]const AstNode {
-        var statements = std.ArrayList(AstNode).init(self.allocator);
-        defer statements.deinit();
+        var statements: std.ArrayList(AstNode) = .empty;
+        defer statements.deinit(self.allocator);
 
         while (!self.isAtEnd()) {
             const stmt = try self.parseStatement();
-            try statements.append(stmt);
+            try statements.append(self.allocator, stmt);
 
             // Optional semicolon between statements
             if (self.match(.semicolon)) {
@@ -32,7 +32,7 @@ pub const Parser = struct {
             }
         }
 
-        return statements.toOwnedSlice();
+        return statements.toOwnedSlice(self.allocator);
     }
 
     fn parseStatement(self: *Parser) ParseError!AstNode {
@@ -65,14 +65,14 @@ pub const Parser = struct {
         const name = try self.allocator.dupe(u8, name_tok.token.macro_name);
         errdefer self.allocator.free(name);
 
-        var args = std.ArrayList(AstNode).init(self.allocator);
-        defer args.deinit();
+        var args: std.ArrayList(AstNode) = .empty;
+        defer args.deinit(self.allocator);
 
         // Optional argument list: [arg1, arg2, ...]
         if (self.match(.l_bracket)) {
             while (!self.check(.r_bracket) and !self.isAtEnd()) {
                 const arg = try self.parseArg();
-                try args.append(arg);
+                try args.append(self.allocator, arg);
                 if (!self.match(.comma)) break;
             }
             if (!self.match(.r_bracket)) return ParseError.UnexpectedToken;
@@ -88,7 +88,7 @@ pub const Parser = struct {
         return .{
             .macro_invocation = .{
                 .name = name,
-                .args = try args.toOwnedSlice(),
+                .args = try args.toOwnedSlice(self.allocator),
                 .body = body,
             },
         };
@@ -168,16 +168,16 @@ pub const Parser = struct {
     }
 
     fn parseBody(self: *Parser) ParseError![]const AstNode {
-        var statements = std.ArrayList(AstNode).init(self.allocator);
-        defer statements.deinit();
+        var statements: std.ArrayList(AstNode) = .empty;
+        defer statements.deinit(self.allocator);
 
         while (!self.check(.r_brace) and !self.isAtEnd()) {
             const stmt = try self.parseStatement();
-            try statements.append(stmt);
+            try statements.append(self.allocator, stmt);
             if (self.match(.semicolon)) continue;
         }
 
-        return statements.toOwnedSlice();
+        return statements.toOwnedSlice(self.allocator);
     }
 
     fn parseArg(self: *Parser) ParseError!AstNode {
@@ -198,7 +198,7 @@ pub const Parser = struct {
 
     fn match(self: *Parser, tag: std.meta.Tag(Token)) bool {
         if (self.check(tag)) {
-            self.advance();
+            _ = self.advance();
             return true;
         }
         return false;

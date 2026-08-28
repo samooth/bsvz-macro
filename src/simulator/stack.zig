@@ -38,7 +38,7 @@ pub const SymbolicStack = struct {
 
     pub fn pop(self: *SymbolicStack) !StackItem {
         if (self.items.items.len == 0) return error.StackUnderflow;
-        return self.items.pop();
+        return self.items.pop() orelse return error.StackUnderflow;
     }
 
     pub fn peek(self: *SymbolicStack, depth: usize) !StackItem {

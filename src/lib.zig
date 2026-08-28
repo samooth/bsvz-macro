@@ -25,7 +25,7 @@ pub const CompileOptions = struct {
 };
 
 pub const MacroExpansion = struct {
-    bytecode: []u8,
+    bytecode: []const u8,
     asm_text: ?[]const u8,
     hash: [32]u8,
     opcode_count: u32,
@@ -217,5 +217,11 @@ fn deinitAstNode(allocator: std.mem.Allocator, node: @import("parser/ast.zig").A
 }
 
 test {
-    @import("std").testing.refAllDeclsRecursive(@This());
+    _ = lexer;
+    _ = parser;
+    _ = expander;
+    _ = prelude;
+    _ = simulator;
+    _ = validator;
+    _ = encoder;
 }
