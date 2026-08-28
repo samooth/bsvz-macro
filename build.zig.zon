@@ -13,6 +13,12 @@
             .hash = "zig_wallet_toolbox-0.1.0-yWfVolP1BADleEjqRBsj38XcHaWp2LnYkw7RzsHS0-hG",
         },
     },
+    .overrides = .{
+        .sqlite = .{
+            .url = "https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip",
+            .hash = "N-V-__8AAGVtrgCcOcmjrOJnagmnRyMrcKaOo09KbU-vu8w8",
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",
