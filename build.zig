@@ -181,4 +181,74 @@ pub fn build(b: *std.Build) void {
      });
      const run_parse_tests = b.addRunArtifact(parse_tests);
      test_step.dependOn(&run_parse_tests.step);
+
+     // Test helpers (contains tests for the helpers themselves)
+     const helpers_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/helpers.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     helpers_test_module.addImport("bsvz-macro", macro_mod);
+     helpers_test_module.addImport("bsvz", bsvz_mod);
+     const helpers_tests = b.addTest(.{
+         .root_module = helpers_test_module,
+     });
+     const run_helpers_tests = b.addRunArtifact(helpers_tests);
+     test_step.dependOn(&run_helpers_tests.step);
+
+     // Test data builders (contains tests for the builders)
+     const test_data_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/test_data.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     test_data_test_module.addImport("bsvz-macro", macro_mod);
+     test_data_test_module.addImport("bsvz", bsvz_mod);
+     const test_data_tests = b.addTest(.{
+         .root_module = test_data_test_module,
+     });
+     const run_test_data_tests = b.addRunArtifact(test_data_tests);
+     test_step.dependOn(&run_test_data_tests.step);
+
+     // Property-based tests
+     const prop_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/property_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     prop_test_module.addImport("bsvz-macro", macro_mod);
+     prop_test_module.addImport("bsvz", bsvz_mod);
+     const prop_tests = b.addTest(.{
+         .root_module = prop_test_module,
+     });
+     const run_prop_tests = b.addRunArtifact(prop_tests);
+     test_step.dependOn(&run_prop_tests.step);
+
+     // Benchmark tests
+     const bench_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/benchmark_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     bench_test_module.addImport("bsvz-macro", macro_mod);
+     bench_test_module.addImport("bsvz", bsvz_mod);
+     const bench_tests = b.addTest(.{
+         .root_module = bench_test_module,
+     });
+     const run_bench_tests = b.addRunArtifact(bench_tests);
+     test_step.dependOn(&run_bench_tests.step);
+
+     // Example tests using helpers (demonstrates helper value)
+     const examples_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/examples_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     examples_test_module.addImport("bsvz-macro", macro_mod);
+     examples_test_module.addImport("bsvz", bsvz_mod);
+     const examples_tests = b.addTest(.{
+         .root_module = examples_test_module,
+     });
+     const run_examples_tests = b.addRunArtifact(examples_tests);
+     test_step.dependOn(&run_examples_tests.step);
 }
