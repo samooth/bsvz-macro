@@ -10,13 +10,13 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout bsvz-macro
+        uses: actions/checkout@v5
+
       - name: Install Zig
         uses: ./.github/actions/setup-zig
         with:
           version: "0.16.0"
-
-      - name: Checkout bsvz-macro
-        uses: actions/checkout@v4
 
       # Dependencies (bsvz, zig-wallet-toolbox) are fetched automatically by the
       # Zig package manager from GitHub (see build.zig.zon). No sibling checkout
