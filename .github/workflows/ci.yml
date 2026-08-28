@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Zig
-        uses: ziglang/setup-zig@v2
+        uses: ./.github/actions/setup-zig
         with:
           version: "0.16.0"
 
