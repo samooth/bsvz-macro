@@ -92,9 +92,11 @@ pub fn compile(
     defer engine.deinit();
 
     // Pre-populate stack with dummy items for macro expansion simulation
-    // Macros are meant to be used with existing stack items
-    for (0..4) |_| {
-        try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 0 } });
+    // Macros are meant to be used with existing stack items.
+    // We use .integer so subsequent arithmetic ops don't trigger type errors.
+    const pre_populated: u16 = 4;
+    for (0..pre_populated) |_| {
+        try engine.main_stack.push(allocator, .{ .type = StackType.integer });
     }
 
     const sim_report = engine.simulate(bytecode, options.max_stack_elements) catch |e| {
@@ -141,7 +143,10 @@ pub fn compile(
          .hash = hash,
          .opcode_count = @intCast(bytecode.len),
          .byte_length = @intCast(bytecode.len),
-         .max_stack_height = sim_report.max_stack_height,
+         .max_stack_height = if (sim_report.max_stack_height > pre_populated)
+            sim_report.max_stack_height - pre_populated
+        else
+            0,
          .is_standard = is_standard,
      };
 }

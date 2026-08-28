@@ -9,7 +9,7 @@ test "stack sim: simple arithmetic" {
     const result = try bsvz_macro.compile(allocator, "OP_1 OP_2 OP_ADD", .{});
     defer result.deinit(allocator);
 
-    try testing.expectEqual(@as(u16, 1), result.max_stack_height);
+    try testing.expectEqual(@as(u16, 2), result.max_stack_height);
 }
 
 test "stack sim: dup" {

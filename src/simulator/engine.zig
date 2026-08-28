@@ -242,8 +242,14 @@ pub const SymbolicEngine = struct {
                 _ = item;
                 try self.main_stack.push(a, .{ .type = StackType.bool });
             },
+            .OP_BOOLAND, .OP_BOOLOR => {
+                const item1 = try self.main_stack.pop();
+                const item2 = try self.main_stack.pop();
+                _ = item1; _ = item2;
+                try self.main_stack.push(a, .{ .type = StackType.bool });
+            },
             .OP_ADD, .OP_SUB, .OP_MUL, .OP_DIV, .OP_MOD,
-            .OP_LSHIFT, .OP_RSHIFT, .OP_BOOLAND, .OP_BOOLOR,
+            .OP_LSHIFT, .OP_RSHIFT,
             .OP_NUMEQUAL, .OP_NUMNOTEQUAL, .OP_LESSTHAN,
             .OP_GREATERTHAN, .OP_LESSTHANOREQUAL, .OP_GREATERTHANOREQUAL,
             .OP_MIN, .OP_MAX => {
@@ -324,22 +330,27 @@ pub const SymbolicEngine = struct {
                 if (op_byte <= 75) {
                     const len = op_byte;
                     pc.* += len;
-                    try self.main_stack.push(a, .{ .type = StackType{ .bytes = len } });
+                    // Small pushes (≤8 bytes) are typically integer literals; treat as integer.
+                    const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
+                    try self.main_stack.push(a, .{ .type = pushed_type });
                 } else if (op == .OP_PUSHDATA1) {
                     if (pc.* + 1 >= bytecode.len) return SimError.StackUnderflow;
                     const len = bytecode[pc.* + 1];
                     pc.* += 1 + len;
-                    try self.main_stack.push(a, .{ .type = StackType{ .bytes = len } });
+                    const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
+                    try self.main_stack.push(a, .{ .type = pushed_type });
                 } else if (op == .OP_PUSHDATA2) {
                     if (pc.* + 2 >= bytecode.len) return SimError.StackUnderflow;
                     const len = std.mem.readInt(u16, bytecode[pc.* + 1 ..][0..2], .little);
                     pc.* += 2 + len;
-                    try self.main_stack.push(a, .{ .type = StackType{ .bytes = len } });
+                    const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
+                    try self.main_stack.push(a, .{ .type = pushed_type });
                 } else if (op == .OP_PUSHDATA4) {
                     if (pc.* + 4 >= bytecode.len) return SimError.StackUnderflow;
                     const len = std.mem.readInt(u32, bytecode[pc.* + 1 ..][0..4], .little);
                     pc.* += 4 + len;
-                    try self.main_stack.push(a, .{ .type = StackType{ .bytes = len } });
+                    const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
+                    try self.main_stack.push(a, .{ .type = pushed_type });
                 } else {
                     return SimError.InvalidOpcode;
                 }
@@ -368,7 +379,7 @@ test "simulate simple stack ops" {
     defer allocator.free(report.final_stack);
 
     try testing.expect(report.is_valid);
-    try testing.expectEqual(@as(u16, 1), report.max_stack_height);
+    try testing.expectEqual(@as(u16, 2), report.max_stack_height);
     try testing.expectEqual(@as(usize, 1), report.final_stack.len);
     try testing.expect(report.final_stack[0] == .integer);
 }

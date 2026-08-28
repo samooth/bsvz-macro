@@ -281,13 +281,15 @@ fn freeAst(allocator: std.mem.Allocator, nodes: []const AstNode) void {
             else => {},
         }
     }
-    allocator.free(nodes);
 }
 
 test "parse simple opcodes" {
     const allocator = testing.allocator;
     const ast = try parseSource(allocator, "OP_DUP OP_HASH160");
-    defer freeAst(allocator, ast);
+    defer {
+        freeAst(allocator, ast);
+        allocator.free(ast);
+    }
 
     try testing.expectEqual(@as(usize, 2), ast.len);
     try testing.expect(ast[0] == .opcode_literal);
@@ -297,7 +299,10 @@ test "parse simple opcodes" {
 test "parse macro invocation with args" {
     const allocator = testing.allocator;
     const ast = try parseSource(allocator, "OP_XSWAP[3]");
-    defer freeAst(allocator, ast);
+    defer {
+        freeAst(allocator, ast);
+        allocator.free(ast);
+    }
 
     try testing.expectEqual(@as(usize, 1), ast.len);
     try testing.expect(ast[0] == .macro_invocation);
@@ -310,7 +315,10 @@ test "parse macro invocation with args" {
 test "parse loop block" {
     const allocator = testing.allocator;
     const ast = try parseSource(allocator, "LOOP[3]{ OP_DUP OP_MUL }");
-    defer freeAst(allocator, ast);
+    defer {
+        freeAst(allocator, ast);
+        allocator.free(ast);
+    }
 
     try testing.expectEqual(@as(usize, 1), ast.len);
     try testing.expect(ast[0] == .loop_block);
@@ -321,7 +329,10 @@ test "parse loop block" {
 test "parse conditional" {
     const allocator = testing.allocator;
     const ast = try parseSource(allocator, "@bsv{ OP_CAT } else { OP_NOP }");
-    defer freeAst(allocator, ast);
+    defer {
+        freeAst(allocator, ast);
+        allocator.free(ast);
+    }
 
     try testing.expectEqual(@as(usize, 1), ast.len);
     try testing.expect(ast[0] == .conditional);
