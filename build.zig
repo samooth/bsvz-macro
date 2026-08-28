@@ -97,4 +97,88 @@ pub fn build(b: *std.Build) void {
      });
      const run_sim_tests = b.addRunArtifact(sim_tests);
      test_step.dependOn(&run_sim_tests.step);
+
+     // Negative tests
+     const neg_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/negative_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     neg_test_module.addImport("bsvz-macro", macro_mod);
+     neg_test_module.addImport("bsvz", bsvz_mod);
+     const neg_tests = b.addTest(.{
+         .root_module = neg_test_module,
+     });
+     const run_neg_tests = b.addRunArtifact(neg_tests);
+     test_step.dependOn(&run_neg_tests.step);
+
+     // Validator tests
+     const val_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/validator_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     val_test_module.addImport("bsvz-macro", macro_mod);
+     val_test_module.addImport("bsvz", bsvz_mod);
+     const val_tests = b.addTest(.{
+         .root_module = val_test_module,
+     });
+     const run_val_tests = b.addRunArtifact(val_tests);
+     test_step.dependOn(&run_val_tests.step);
+
+     // Simulator tests
+     const sim2_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/simulator_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     sim2_test_module.addImport("bsvz-macro", macro_mod);
+     sim2_test_module.addImport("bsvz", bsvz_mod);
+     const sim2_tests = b.addTest(.{
+         .root_module = sim2_test_module,
+     });
+     const run_sim2_tests = b.addRunArtifact(sim2_tests);
+     test_step.dependOn(&run_sim2_tests.step);
+
+     // Expander tests
+     const exp_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/expander_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     exp_test_module.addImport("bsvz-macro", macro_mod);
+     exp_test_module.addImport("bsvz", bsvz_mod);
+     const exp_tests = b.addTest(.{
+         .root_module = exp_test_module,
+     });
+     const run_exp_tests = b.addRunArtifact(exp_tests);
+     test_step.dependOn(&run_exp_tests.step);
+
+     // Lexer tests
+     const lex_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/lexer_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     lex_test_module.addImport("bsvz-macro", macro_mod);
+     lex_test_module.addImport("bsvz", bsvz_mod);
+     const lex_tests = b.addTest(.{
+         .root_module = lex_test_module,
+     });
+     const run_lex_tests = b.addRunArtifact(lex_tests);
+     test_step.dependOn(&run_lex_tests.step);
+
+     // Parser tests
+     const parse_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/parser_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     parse_test_module.addImport("bsvz-macro", macro_mod);
+     parse_test_module.addImport("bsvz", bsvz_mod);
+     const parse_tests = b.addTest(.{
+         .root_module = parse_test_module,
+     });
+     const run_parse_tests = b.addRunArtifact(parse_tests);
+     test_step.dependOn(&run_parse_tests.step);
 }
