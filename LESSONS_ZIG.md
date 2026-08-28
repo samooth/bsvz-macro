@@ -1,12 +1,21 @@
 # Lessons Learned Working with Zig on bsvz-macro
 
-## Local‑Path Dependencies Require Sibling Checkouts
-The project declares dependencies via relative paths in `build.zig.zon`:
+## Dependencies Are Fetched From GitHub
+The project declares dependencies as pinned Git archives in `build.zig.zon`
+(fetched by the Zig package manager — no sibling checkout needed):
 ```zig
-.bsvz = { .path = "../bsvz" },
-.zig_wallet_toolbox = { .path = "../zig-wallet-toolbox" },
+.bsvz = .{
+    .url = "https://github.com/samooth/bsvz/archive/<commit>.tar.gz",
+    .hash = "bsvz-0.1.0-wvsL-dviFQDU2Al1QQBlT1s8lDJPmNDXLWdg1-1Q4fBw",
+},
+.zig_wallet_toolbox = .{
+    .url = "https://github.com/samooth/zig-wallet-toolbox/archive/<commit>.tar.gz",
+    .hash = "zig_wallet_toolbox-0.1.0-yWfVolP1BADleEjqRBsj38XcHaWp2LnYkw7RzsHS0-hG",
+},
 ```
-CI workflows must therefore check out these repositories as siblings (e.g. `../bsvz` and `../zig-wallet-toolbox` relative to the macro repo) so the compiler can resolve them. See `.github/workflows/ci.yml`.
+To update or pin a dependency, use `zig fetch --save <tarball-or-git-url>`; it
+writes the correct `.url` + `.hash` into `build.zig.zon` automatically. CI does
+not need to check out the dependencies as siblings.
 
 ## Each Test File Is a Separate Root
 In `build.zig`, the `test_step` depends on many `addTest`/`addRunArtifact` pairs, each with its own `root_module`. Consequently:
@@ -20,25 +29,24 @@ hasher.update(std.mem.asBytes(&options))
 ```
 Changing any field—even ones that do not affect emitted bytecode like `.emit_asm`—alters the final hash. Property‑tests that assert hash stability must either fix all options or explicitly expect a change when an option toggles.
 
-## Simulator Depth‑Argument Bug
-In `src/simulator/engine.zig`, `OP_PICK` and `OP_ROLL` pop the depth value but then hard‑code `n = 0`:
-```zig
-.OP_PICK => {
-    const n_item = try self.main_stack.pop();
-    // … type check …
-    const n: usize = 0;                 // BUG: ignores popped depth!
-    const item = try self.main_stack.peek(n);
-    try self.main_stack.push(a, item);
-},
-.OP_ROLL => {
-    const n_item = try self.main_stack.pop();
-    // … type check …
-    const n: usize = 0;                 // BUG: ignores popped depth!
-    const item = try self.main_stack.removeAt(a, n);
-    try self.main_stack.push(a, item);
-},
-```
-This bug caused property‑tests for looped `OP_XDROP[2]` to fail with stack underflow, because the depth argument is consumed by the `pop()` but the operation always uses depth 0.
+## Simulator Depth‑Argument Bug (fixed)
+`src/simulator/engine.zig` used to pop the `OP_PICK`/`OP_ROLL` depth value and then
+hard‑code `n = 0`, ignoring the real depth. The fix required two changes:
+- **Track literal values**: `StackItem` gained a `value: ?i64` field, populated by
+  `OP_0`/`OP_1..OP_16`/`OP_1NEGATE`, direct `push`/`PUSHDATA*` opcodes (decoded via
+  `decodeScriptNum`, capped at 8 bytes), and `pushedValue`. `OP_PICK`/`OP_ROLL` now
+  read `n_item.value` and use it as the depth.
+- **Model the caller's stack as unbounded**: a macro is a *fragment*, so the four
+  pre‑populated items are not the whole story. `SymbolicStack.ensureDepth` lazily
+  materializes the missing items at the bottom of the stack (as `.integer`, matching
+  the existing pre‑population convention). This lets `OP_XSWAP[100]` and
+  `PUSHTX_FRAGMENT[10]` compile; their reported `max_stack_height` counts how deep
+  the fragment reaches. Depth errors still fire for a negative depth, a depth
+  `>= max_stack_elements`, or a non‑integer depth argument.
+
+A depth that is not a statically known literal (e.g. `OP_DEPTH OP_PICK`) keeps stack
+heights correct but yields an `.unknown`‑typed item at the top, so the simulator stays
+conservative instead of guessing.
 
 ## Stack Consumption of `OP_XDROP[2]`
 The macro expands to:
@@ -118,10 +126,10 @@ Assembling `zig test` module flags by hand fails with *"main module provided bot
 ```sh
 zig test -ODebug --dep bsvz-macro --dep bsvz \
   -Mroot=tests/property_tests.zig \
-  -Mbsvz-macro=src/lib.zig -Mbsvz=../bsvz/src/lib.zig \
-  -Mzig-wallet-toolbox=../zig-wallet-toolbox/src/lib.zig --dep bsvz-macro
+  -Mbsvz-macro=src/lib.zig -Mbsvz=$(zig env ZIG_GLOBAL_CACHE_DIR)/.../bsvz/lib.zig \
+  -Mzig-wallet-toolbox=$(zig env ZIG_GLOBAL_CACHE_DIR)/.../zig-wallet-toolbox/lib.zig --dep bsvz-macro
 ```
-i.e. give the root via `-Mroot=` and declare dependency edges with `--dep`, rather than passing the test file as a positional argument.
+i.e. give the root via `-Mroot=` and declare dependency edges with `--dep`, rather than passing the test file as a positional argument. When dependencies are fetched (not local siblings), point `-Mbsvz`/`-Mzig-wallet-toolbox` at the cached package sources under the Zig global cache, or simply run the suites via `zig build test`.
 
 ---
 *Generated during the test‑improvements session on 2026-08-28.*

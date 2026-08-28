@@ -13,6 +13,7 @@ pub const StackType = union(enum) {
 
 pub const StackItem = struct {
     type: StackType,
+    value: ?i64 = null,
 };
 
 pub const SymbolicStack = struct {
@@ -61,6 +62,23 @@ pub const SymbolicStack = struct {
 
     pub fn height(self: *SymbolicStack) usize {
         return self.items.items.len;
+    }
+
+    pub fn ensureDepth(self: *SymbolicStack, allocator: std.mem.Allocator, depth: usize) !void {
+        const old_len = self.items.items.len;
+        if (depth < old_len) return;
+        const missing = depth + 1 - old_len;
+        try self.items.ensureUnusedCapacity(allocator, missing);
+        self.items.items.len = old_len + missing;
+        std.mem.copyBackwards(
+            StackItem,
+            self.items.items[missing .. missing + old_len],
+            self.items.items[0..old_len],
+        );
+        @memset(self.items.items[0..missing], .{ .type = StackType.integer });
+        if (self.items.items.len > self.max_height) {
+            self.max_height = self.items.items.len;
+        }
     }
 
     pub fn removeAt(self: *SymbolicStack, _: std.mem.Allocator, depth: usize) !StackItem {

@@ -12,10 +12,11 @@ point: `bsvz_macro.compile(allocator, source, options)` in `src/lib.zig`.
 ## Hard rules (do not violate)
 - **Zig version**: target `0.16.0` (`minimum_zig_version` in `build.zig.zon`).
   Do not bump without updating CI and the README badge.
-- **Dependencies are local paths**, not network fetches:
-  `../bsvz` and `../zig-wallet-toolbox` (see `build.zig.zon`). Never replace
-  them with registry URLs in this repo. They must exist as siblings for any
-  build/test to work.
+- **Dependencies are fetched, not local paths**: `bsvz` and
+  `zig-wallet-toolbox` are pulled from GitHub as pinned Git archives in
+  `build.zig.zon` (`.url` + `.hash`). Do not replace them with local
+  `../` paths — the Zig package manager downloads and caches them on first
+  build. A network connection is required for the initial fetch.
 - **No mocks/stubs for `bsvz`**: the codebase integrates the real `bsvz`
   ScriptEngine/encoder. Keep it that way.
 - **Fail‑fast on invalid bytecode**: prefer returning an error over emitting
@@ -48,16 +49,21 @@ zig build test -Doptimize=ReleaseSafe   # safety checks + stack traces
   Given/When/Then phrasing for clarity.
 
 ## Known pitfalls (read before touching these areas)
-- **Simulator `OP_PICK`/`OP_ROLL` bug**: in `src/simulator/engine.zig` both
-  opcodes pop the depth value but then hard‑code `n = 0`, ignoring the real
-  depth. Any correct depth‑dependent behavior is currently impossible through
-  the simulator. See `LESSONS_ZIG.md`.
-- **`OP_XDROP[2]` is net −1 per iteration** (depth push consumed by `OP_ROLL`,
-  then `OP_DROP`). With the engine pre‑populating four integers, looping it
-  ≥5× underflows the stack. The same applies to other net‑negative macros
-  (`SAFE_DIV`, `RANGE_CHECK`). Keep loop bounds small or use stack‑neutral /
-  stack‑growing macros (`OP_XSWAP`, `OP_XROT`, `OP_HASHCAT`) in loop
-  properties.
+- **`OP_PICK`/`OP_ROLL` depth model**: the simulator honors the popped depth
+  (it tracks literal push values in `StackItem.value`). Because a macro is a
+  *fragment*, the caller's stack is modeled as unbounded: reaching a depth below
+  the modeled items lazily materializes `.integer` items at the bottom
+  (`SymbolicStack.ensureDepth`), so `OP_XSWAP[100]` and `PUSHTX_FRAGMENT[10]`
+  compile and their reported `max_stack_height` includes the depth they reach.
+  Errors are raised for a negative depth, a depth `>= max_stack_elements`, and a
+  non‑integer depth. A depth that is not a statically known literal (e.g.
+  `OP_DEPTH OP_PICK`) keeps heights correct and yields an `.unknown`‑typed item.
+- **Net‑negative macros can still underflow in loops**: macros that only pop
+  (`SAFE_DIV`, `RANGE_CHECK`) underflow the 4 pre‑populated items when looped
+  (e.g. `LOOP[10]{ SAFE_DIV }` → `SimError`). `OP_XDROP[n]` no longer underflows,
+  because `OP_ROLL` materializes the caller items it reaches for. Prefer
+  stack‑neutral / stack‑growing macros (`OP_XSWAP`, `OP_XROT`, `OP_HASHCAT`) in
+  loop properties.
 - **Iterator `<i>` is now supported**: the parser accepts `<i>` both as a loop
   body statement and inside macro argument lists (e.g. `LOOP[n]{ RANGE_CHECK[<i>,100] }`).
   The index runs `0..n-1`; macros requiring `arg >= 1` (e.g. `OP_XSWAP[<i>]`) fail
@@ -76,9 +82,10 @@ result hash. Changing any option changes the hash even when bytecode is
 identical. Preserve this invariant.
 
 ## CI
-`.github/workflows/ci.yml` checks out this repo plus its two sibling
-dependencies as siblings, then runs `zig build test` in Debug and ReleaseSafe.
-Keep it in sync if dependency layouts or Zig version change.
+`.github/workflows/ci.yml` checks out this repo and runs `zig build test` in
+Debug and ReleaseSafe. Dependencies are fetched automatically from GitHub by
+the Zig package manager (see `build.zig.zon`), so no sibling checkout is
+needed. Keep it in sync if dependency URLs/hashes or Zig version change.
 
 ## Docs
 - `README.md` — project overview, features, macros.

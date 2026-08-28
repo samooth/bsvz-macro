@@ -19,6 +19,35 @@ pub const StackTransition = struct {
     post_stack_height: usize,
 };
 
+fn decodeScriptNum(data: []const u8) ?i64 {
+    if (data.len == 0) return 0;
+    if (data.len > 8) return null;
+    var magnitude: u64 = 0;
+    for (data, 0..) |b, i| {
+        const shift: u6 = @intCast(8 * i);
+        magnitude |= @as(u64, b) << shift;
+    }
+    const sign_shift: u6 = @intCast(8 * (data.len - 1) + 7);
+    const sign_mask = @as(u64, 1) << sign_shift;
+    if (magnitude & sign_mask != 0) {
+        const abs_value: i64 = @intCast(magnitude & ~sign_mask);
+        return -abs_value;
+    }
+    return @intCast(magnitude);
+}
+
+fn pushedValue(bytecode: []const u8, start: usize, len: usize) ?i64 {
+    if (len > 8) return null;
+    if (start + len > bytecode.len) return null;
+    return decodeScriptNum(bytecode[start .. start + len]);
+}
+
+fn depthFromValue(value: i64, max_stack: u16) SimError!usize {
+    if (value < 0) return SimError.InvalidStackIndex;
+    if (value >= @as(i64, max_stack)) return SimError.InvalidStackIndex;
+    return @intCast(value);
+}
+
 pub const SymbolicEngine = struct {
     main_stack: SymbolicStack,
     alt_stack: SymbolicStack,
@@ -74,12 +103,13 @@ pub const SymbolicEngine = struct {
     fn executeOpcode(self: *SymbolicEngine, op: Opcode, bytecode: []const u8, pc: *u32, max_stack: u16) SimError!void {
         const a = self.allocator;
         switch (op) {
-            .OP_0 => try self.main_stack.push(a, .{ .type = StackType{ .integer = {} } }),
+            .OP_0 => try self.main_stack.push(a, .{ .type = StackType{ .integer = {} }, .value = 0 }),
             .OP_1, .OP_2, .OP_3, .OP_4, .OP_5, .OP_6, .OP_7, .OP_8,
             .OP_9, .OP_10, .OP_11, .OP_12, .OP_13, .OP_14, .OP_15, .OP_16 => {
-                try self.main_stack.push(a, .{ .type = StackType{ .integer = {} } });
+                const literal: i64 = @as(i64, @intFromEnum(op)) - @as(i64, @intFromEnum(Opcode.OP_1)) + 1;
+                try self.main_stack.push(a, .{ .type = StackType{ .integer = {} }, .value = literal });
             },
-            .OP_1NEGATE => try self.main_stack.push(a, .{ .type = StackType{ .integer = {} } }),
+            .OP_1NEGATE => try self.main_stack.push(a, .{ .type = StackType{ .integer = {} }, .value = -1 }),
 
             .OP_DUP => try self.main_stack.dup(a),
             .OP_DROP => _ = try self.main_stack.pop(),
@@ -145,16 +175,28 @@ pub const SymbolicEngine = struct {
             .OP_PICK => {
                 const n_item = try self.main_stack.pop();
                 if (std.meta.activeTag(n_item.type) != .integer) return SimError.TypeMismatch;
-                const n: usize = 0;
-                const item = try self.main_stack.peek(n);
-                try self.main_stack.push(a, item);
+                if (n_item.value) |raw_depth| {
+                    const n = try depthFromValue(raw_depth, max_stack);
+                    try self.main_stack.ensureDepth(a, n);
+                    const item = try self.main_stack.peek(n);
+                    try self.main_stack.push(a, item);
+                } else {
+                    try self.main_stack.push(a, .{ .type = StackType.unknown });
+                }
             },
             .OP_ROLL => {
                 const n_item = try self.main_stack.pop();
                 if (std.meta.activeTag(n_item.type) != .integer) return SimError.TypeMismatch;
-                const n: usize = 0;
-                const item = try self.main_stack.removeAt(a, n);
-                try self.main_stack.push(a, item);
+                if (n_item.value) |raw_depth| {
+                    const n = try depthFromValue(raw_depth, max_stack);
+                    try self.main_stack.ensureDepth(a, n);
+                    const item = try self.main_stack.removeAt(a, n);
+                    try self.main_stack.push(a, item);
+                } else {
+                    try self.main_stack.ensureDepth(a, 0);
+                    _ = try self.main_stack.removeAt(a, 0);
+                    try self.main_stack.push(a, .{ .type = StackType.unknown });
+                }
             },
             .OP_TUCK => {
                 if (self.main_stack.height() < 2) return SimError.StackUnderflow;
@@ -329,28 +371,44 @@ pub const SymbolicEngine = struct {
                 const op_byte: u8 = @intFromEnum(op);
                 if (op_byte <= 75) {
                     const len = op_byte;
+                    const data_start = pc.* + 1;
                     pc.* += len;
                     // Small pushes (≤8 bytes) are typically integer literals; treat as integer.
                     const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
-                    try self.main_stack.push(a, .{ .type = pushed_type });
+                    try self.main_stack.push(a, .{
+                        .type = pushed_type,
+                        .value = pushedValue(bytecode, data_start, len),
+                    });
                 } else if (op == .OP_PUSHDATA1) {
                     if (pc.* + 1 >= bytecode.len) return SimError.StackUnderflow;
                     const len = bytecode[pc.* + 1];
+                    const data_start = pc.* + 2;
                     pc.* += 1 + len;
                     const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
-                    try self.main_stack.push(a, .{ .type = pushed_type });
+                    try self.main_stack.push(a, .{
+                        .type = pushed_type,
+                        .value = pushedValue(bytecode, data_start, len),
+                    });
                 } else if (op == .OP_PUSHDATA2) {
                     if (pc.* + 2 >= bytecode.len) return SimError.StackUnderflow;
                     const len = std.mem.readInt(u16, bytecode[pc.* + 1 ..][0..2], .little);
+                    const data_start = pc.* + 3;
                     pc.* += 2 + len;
                     const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
-                    try self.main_stack.push(a, .{ .type = pushed_type });
+                    try self.main_stack.push(a, .{
+                        .type = pushed_type,
+                        .value = pushedValue(bytecode, data_start, len),
+                    });
                 } else if (op == .OP_PUSHDATA4) {
                     if (pc.* + 4 >= bytecode.len) return SimError.StackUnderflow;
                     const len = std.mem.readInt(u32, bytecode[pc.* + 1 ..][0..4], .little);
+                    const data_start = pc.* + 5;
                     pc.* += 4 + len;
                     const pushed_type: StackType = if (len <= 8) .integer else .{ .bytes = len };
-                    try self.main_stack.push(a, .{ .type = pushed_type });
+                    try self.main_stack.push(a, .{
+                        .type = pushed_type,
+                        .value = pushedValue(bytecode, data_start, len),
+                    });
                 } else {
                     return SimError.InvalidOpcode;
                 }
@@ -408,4 +466,159 @@ test "simulate xswap3 expansion" {
     defer allocator.free(report.final_stack);
 
     try testing.expect(report.is_valid);
+}
+
+test "OP_PICK copies the item at the popped depth" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 11 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 22 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 33 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_2.toByte(), Opcode.OP_PICK.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 4), report.final_stack.len);
+    try testing.expectEqual(@as(u32, 11), report.final_stack[0].bytes);
+    try testing.expectEqual(@as(u32, 22), report.final_stack[1].bytes);
+    try testing.expectEqual(@as(u32, 33), report.final_stack[2].bytes);
+    try testing.expectEqual(@as(u32, 11), report.final_stack[3].bytes);
+}
+
+test "OP_ROLL moves the item at the popped depth to the top" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 11 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 22 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 33 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_2.toByte(), Opcode.OP_ROLL.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 3), report.final_stack.len);
+    try testing.expectEqual(@as(u32, 22), report.final_stack[0].bytes);
+    try testing.expectEqual(@as(u32, 33), report.final_stack[1].bytes);
+    try testing.expectEqual(@as(u32, 11), report.final_stack[2].bytes);
+}
+
+test "OP_PICK depth 0 still copies the top item" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 11 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 22 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_0.toByte(), Opcode.OP_PICK.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 3), report.final_stack.len);
+    try testing.expectEqual(@as(u32, 22), report.final_stack[2].bytes);
+}
+
+test "OP_PICK materializes caller-supplied items below the modeled stack" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 7 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_3.toByte(), Opcode.OP_PICK.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 5), report.final_stack.len);
+    try testing.expect(report.final_stack[0] == .integer);
+    try testing.expectEqual(@as(u32, 7), report.final_stack[3].bytes);
+    try testing.expect(report.final_stack[4] == .integer);
+    try testing.expectEqual(@as(u16, 5), report.max_stack_height);
+}
+
+test "OP_PICK honors a depth pushed as push data" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 9 } });
+
+    const bytecode = &[_]u8{ 0x01, 20, Opcode.OP_PICK.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 22), report.final_stack.len);
+    try testing.expectEqual(@as(u32, 9), report.final_stack[20].bytes);
+    try testing.expect(report.final_stack[21] == .integer);
+}
+
+test "OP_PICK rejects a negative depth" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 4 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_1NEGATE.toByte(), Opcode.OP_PICK.toByte() };
+    try testing.expectError(SimError.InvalidStackIndex, engine.simulate(bytecode, 1000));
+}
+
+test "OP_ROLL rejects a negative depth encoded as push data" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 4 } });
+
+    const bytecode = &[_]u8{ 0x01, 0x81, Opcode.OP_ROLL.toByte() };
+    try testing.expectError(SimError.InvalidStackIndex, engine.simulate(bytecode, 1000));
+}
+
+test "OP_PICK rejects a depth beyond the stack element limit" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 4 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_16.toByte(), Opcode.OP_PICK.toByte() };
+    try testing.expectError(SimError.InvalidStackIndex, engine.simulate(bytecode, 8));
+}
+
+test "OP_PICK with an unknown depth yields an unknown item" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 11 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 22 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_DEPTH.toByte(), Opcode.OP_PICK.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 3), report.final_stack.len);
+    try testing.expect(report.final_stack[2] == .unknown);
+}
+
+test "OP_ROLL with an unknown depth preserves the stack height" {
+    const allocator = testing.allocator;
+    var engine = SymbolicEngine.init(allocator);
+    defer engine.deinit();
+
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 11 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 22 } });
+    try engine.main_stack.push(allocator, .{ .type = StackType{ .bytes = 33 } });
+
+    const bytecode = &[_]u8{ Opcode.OP_DEPTH.toByte(), Opcode.OP_ROLL.toByte() };
+    const report = try engine.simulate(bytecode, 1000);
+    defer allocator.free(report.final_stack);
+
+    try testing.expectEqual(@as(usize, 3), report.final_stack.len);
+    try testing.expect(report.final_stack[2] == .unknown);
 }

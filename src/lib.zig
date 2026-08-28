@@ -102,8 +102,8 @@ pub fn compile(
     const sim_report = engine.simulate(bytecode, options.max_stack_elements) catch |e| {
         allocator.free(bytecode);
         return switch (e) {
-            error.StackUnderflow, error.StackOverflow, error.TypeMismatch, error.PushTooLarge => MacroError.SimError,
-            else => MacroError.OutOfMemory,
+            error.OutOfMemory => MacroError.OutOfMemory,
+            else => MacroError.SimError,
         };
     };
     defer allocator.free(sim_report.final_stack);
@@ -172,7 +172,7 @@ pub fn validateStack(
     defer engine.deinit();
 
     for (expected_pre) |t| {
-        try engine.main_stack.push(.{ .type = t });
+        try engine.main_stack.push(allocator, .{ .type = t });
     }
 
     const report = engine.simulate(bytecode, 1000) catch return MacroError.SimError;

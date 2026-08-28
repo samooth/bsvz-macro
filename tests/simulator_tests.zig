@@ -113,3 +113,72 @@ test "simulator: OP_VERIFY consumes bool" {
     // After VERIFY, stack is empty (relative to pre-population)
     try testing.expectEqual(@as(u16, 1), result.max_stack_height);
 }
+
+// ==================== DEPTH-DEPENDENT OPCODES ====================
+
+test "simulator: OP_PICK is stack-neutral at its popped depth" {
+    const allocator = testing.allocator;
+    // Peak is reached at the depth push (4 items above the pre-populated stack);
+    // OP_PICK then pops the depth and pushes one copy, returning to the peak.
+    const result = try bsvz_macro.compile(allocator, "OP_1 OP_2 OP_3 OP_2 OP_PICK", .{});
+    defer result.deinit(allocator);
+    try testing.expectEqual(@as(u32, 5), result.byte_length);
+    try testing.expectEqual(@as(u16, 4), result.max_stack_height);
+}
+
+test "simulator: OP_ROLL consumes only its depth argument" {
+    const allocator = testing.allocator;
+    // OP_ROLL pops the depth, relocates the item at that depth to the top and
+    // therefore leaves the height one below the peak.
+    const result = try bsvz_macro.compile(allocator, "OP_1 OP_2 OP_3 OP_2 OP_ROLL", .{});
+    defer result.deinit(allocator);
+    try testing.expectEqual(@as(u32, 5), result.byte_length);
+    try testing.expectEqual(@as(u16, 4), result.max_stack_height);
+}
+
+test "simulator: deep OP_PICK depth requires a deep input stack" {
+    const allocator = testing.allocator;
+    // OP_XSWAP[100] picks/rolls at depth 99, so the reported height reflects
+    // the caller-supplied items the fragment reaches into.
+    const result = try bsvz_macro.compile(allocator, "OP_XSWAP[100]", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.max_stack_height >= 96);
+}
+
+test "simulator: PUSHTX_FRAGMENT[10] picks below the pre-populated stack" {
+    const allocator = testing.allocator;
+    // Picking at depth 10 forces 7 caller-supplied items to be modeled beyond
+    // the 4 pre-populated ones, so the reported height grows accordingly.
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[10]", .{});
+    defer result.deinit(allocator);
+    try testing.expectEqual(@as(u16, 8), result.max_stack_height);
+}
+
+test "simulator: depth beyond max_stack_elements is rejected" {
+    const allocator = testing.allocator;
+    // Depth 99 cannot be satisfied when at most 50 stack elements are allowed.
+    const result = bsvz_macro.compile(allocator, "OP_XSWAP[100]", .{
+        .max_stack_elements = 50,
+    });
+    try testing.expectError(error.SimError, result);
+}
+
+test "simulator: negative OP_PICK depth is rejected" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(allocator, "OP_1NEGATE OP_PICK", .{});
+    try testing.expectError(error.SimError, result);
+}
+
+test "simulator: negative OP_ROLL depth is rejected" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(allocator, "OP_1NEGATE OP_ROLL", .{});
+    try testing.expectError(error.SimError, result);
+}
+
+test "simulator: non-integer OP_PICK depth is rejected" {
+    const allocator = testing.allocator;
+    // OP_HASH160 leaves a hash on top, which is not a valid depth argument.
+    const result = bsvz_macro.compile(allocator, "OP_1 OP_HASH160 OP_PICK", .{});
+    try testing.expectError(error.SimError, result);
+}
+
