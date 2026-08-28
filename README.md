@@ -5,7 +5,7 @@
 
 [![Zig](https://img.shields.io/badge/Zig-0.16.0-orange.svg)](https://ziglang.org)
 [![BSV](https://img.shields.io/badge/BSV-Chronicle%20ready-green.svg)](https://bsvblockchain.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Open%20BSV-blue.svg)](LICENSE)
 
 `bsvz-macro` is a **wallet-side macro expansion compiler** for Bitcoin Script (BSV). It transforms a high-level symbolic language (parameterized macros) into legacy opcode sequences compatible with the original Bitcoin protocol (2009). The node never sees a macro; it only sees flat, acyclic, deterministic bytecode.
 
@@ -19,6 +19,14 @@
 | **Consensus Compatible** | Output is bit-for-bit identical to hand-written Script |
 | **Auditability** | Source macro + params → reproducible bytecode |
 | **Fail-Fast** | Better not to emit than to emit invalid bytecode |
+
+## Inspiration
+
+This project is a direct implementation of the ideas presented in the article **"Macro Expansion in Bitcoin Script"** published on Substack. The article formalizes Bitcoin Script as a two-stack pushdown automaton (2PDA) — computationally equivalent to a Turing machine when all control flow is statically bounded and unrolled at compile time — and proposes a wallet-side macro expansion compiler that transforms high-level symbolic macros into flat, acyclic, deterministic legacy opcode sequences.
+
+> *"You write the loop once, but emit it many times — fully expanded, and verifiable by the node interpreter as a static script."*
+
+The article establishes the theoretical foundation (stack algebra, pre/postconditions, macro hygiene, boundedness) that `bsvz-macro` implements in Zig. For a detailed analysis of the original article, see [`docs/article_analysis.md`](docs/article_analysis.md).
 
 ## Features
 
@@ -259,4 +267,13 @@ The core is pure Zig with no network or I/O dependencies — fully WASM-compatib
 
 ## License
 
-MIT — part of the `bsvz` / `zig-wallet-toolbox` ecosystem.
+This project is licensed under the **Open BSV License**.
+
+The Open BSV License is a modified form of the MIT license that grants full rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell the software, with the following conditions:
+
+1. The copyright notice and license text must be included in all copies or substantial portions.
+2. **The software, and any software derived from it, must only be used on the BSV Blockchains** (mainnet and testnets).
+
+This license is inherited from the upstream [`bsvz`](https://github.com/opldotdev/bsvz) dependency, which is released under the Open BSV License. See [LICENSE](LICENSE) for the full text.
+
+> **Note:** The Open BSV License is not OSI-approved. It is a blockchain-specific license designed to prevent unauthorized use on competing blockchains while maintaining open-source accessibility within the BSV ecosystem.
