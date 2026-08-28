@@ -15,30 +15,14 @@ jobs:
         with:
           version: "0.16.0"
 
-      # bsvz-macro depends on two sibling repositories via local path
-      # (see build.zig.zon). Check them out as siblings so `../bsvz` and
-      # `../zig-wallet-toolbox` resolve as the compiler expects.
       - name: Checkout bsvz-macro
         uses: actions/checkout@v4
-        with:
-          path: bsvz-macro
 
-      - name: Checkout bsvz
-        uses: actions/checkout@v4
-        with:
-          repository: t0m4s/bsvz
-          path: bsvz
-
-      - name: Checkout zig-wallet-toolbox
-        uses: actions/checkout@v4
-        with:
-          repository: t0m4s/zig-wallet-toolbox
-          path: zig-wallet-toolbox
-
+      # Dependencies (bsvz, zig-wallet-toolbox) are fetched automatically by the
+      # Zig package manager from GitHub (see build.zig.zon). No sibling checkout
+      # is required.
       - name: Run tests
-        working-directory: bsvz-macro
         run: zig build test
 
       - name: Run tests with release-safe (sanitizers)
-        working-directory: bsvz-macro
         run: zig build test -Doptimize=ReleaseSafe

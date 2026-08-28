@@ -59,22 +59,17 @@ const contract = comptime bsvz_macro.compileComptime(
 ### Prerequisites
 
 - [Zig 0.16.0+](https://ziglang.org/download/)
-- [bsvz](https://github.com/samooth/bsvz) (sibling directory)
-- [zig-wallet-toolbox](https://github.com/samooth/zig-wallet-toolbox) (sibling directory)
+- Network access (dependencies are fetched automatically by the Zig package manager)
 
-### Directory Layout
+### Dependencies
 
-```
-workspace/
-├── bsvz/                  # BSV foundation library
-├── zig-wallet-toolbox/    # Wallet toolkit
-└── bsvz-macro/           # This repo
-```
+`bsvz` and `zig-wallet-toolbox` are fetched from GitHub as pinned Git archives
+(see `build.zig.zon`). No manual checkout or sibling-directory layout is
+required — `zig build` downloads them on first use and caches them.
 
 ### Build
 
 ```bash
-cd bsvz-macro
 zig build
 zig build test
 ```

@@ -70,17 +70,15 @@ llvm-cov report \
   --object ./.zig-cache/o/*/test
 ```
 
-Alternatively, for a one-off module:
+Alternatively, for a one-off module, run `zig build test` (dependencies are
+fetched automatically) and point `llvm-cov` at the generated test binary under
+`.zig-cache/o/*/`. Manual `zig test` invocations must reference the cached
+package sources from the Zig global cache rather than local sibling paths.
 
-```sh
-zig test -ODebug --coverage tests/property_tests.zig -Mroot=tests/property_tests.zig \
-  -Mbsvz-macro=src/lib.zig -Mbsvz=../bsvz/src/lib.zig --dep bsvz --dep zig-wallet-toolbox \
-  -Mzig-wallet-toolbox=../zig-wallet-toolbox/src/lib.zig --dep bsvz-macro
-```
-
-Coverage is **not** wired on by default because the two local-path dependencies
-(`bsvz`, `zig-wallet-toolbox`) must be present for the profile to resolve. See
-`build.zig.zon` and `.github/workflows/ci.yml` for the required checkout layout.
+Coverage is **not** wired on by default. See `build.zig.zon` (dependencies are
+fetched automatically from GitHub) and `.github/workflows/ci.yml` for the setup.
+The Zig package manager downloads and caches `bsvz`/`zig-wallet-toolbox` on
+first build, so no manual checkout is required for coverage either.
 
 ## Performance benchmarks & baselines
 
@@ -107,7 +105,7 @@ and treat absolute numbers as out-of-band baselines.
 
 ## CI
 
-See `.github/workflows/ci.yml`. It checks out `bsvz-macro` together with its two
-sibling dependencies (`bsvz`, `zig-wallet-toolbox`) as siblings so the local-path
-dependencies in `build.zig.zon` resolve, then runs `zig build test` in both
-debug and `ReleaseSafe` modes.
+See `.github/workflows/ci.yml`. It checks out `bsvz-macro` and runs
+`zig build test` in both debug and `ReleaseSafe` modes. Dependencies are fetched
+automatically from GitHub by the Zig package manager, so no sibling checkout of
+`bsvz`/`zig-wallet-toolbox` is needed.

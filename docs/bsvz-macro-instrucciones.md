@@ -9,9 +9,7 @@
 ## Requisitos
 
 - **Zig 0.16.0** o superior
-- Repositorios hermanos en el mismo directorio:
-  - `bsvz/` (https://github.com/samooth/bsvz)
-  - `zig-wallet-toolbox/` (https://github.com/samooth/zig-wallet-toolbox)
+- Acceso a red (las dependencias se descargan automaticamente mediante el gestor de paquetes de Zig desde GitHub: `bsvz` y `zig-wallet-toolbox`, fijadas por commit en `build.zig.zon`). No se requiere clonar repositorios hermanos ni configurar un layout de directorios especial.
 
 ## Estructura del proyecto
 
@@ -66,33 +64,23 @@ bsvz-macro/
 
 ## Instalacion
 
-### 1. Clonar dependencias
+### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/samooth/bsvz
-git clone https://github.com/samooth/zig-wallet-toolbox
 git clone https://github.com/tu-usuario/bsvz-macro
 ```
 
-### 2. Estructura de directorios
+Las dependencias (`bsvz`, `zig-wallet-toolbox`) se obtienen automaticamente al
+ejecutar `zig build` la primera vez, gracias al gestor de paquetes de Zig.
 
-Asegurate de que los tres repos esten al mismo nivel:
-
-```
-workspace/
-  bsvz/
-  zig-wallet-toolbox/
-  bsvz-macro/
-```
-
-### 3. Compilar
+### 2. Compilar
 
 ```bash
 cd bsvz-macro
 zig build
 ```
 
-### 4. Ejecutar tests
+### 3. Ejecutar tests
 
 ```bash
 zig build test

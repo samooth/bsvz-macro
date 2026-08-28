@@ -5,10 +5,12 @@
     .fingerprint = 0x48e4df2574bbddf5,
     .dependencies = .{
         .bsvz = .{
-            .path = "../bsvz",
+            .url = "https://github.com/samooth/bsvz/archive/1712e38e0eb1a215f215ca59364340b28c854e05.tar.gz",
+            .hash = "bsvz-0.1.0-wvsL-dviFQDU2Al1QQBlT1s8lDJPmNDXLWdg1-1Q4fBw",
         },
         .zig_wallet_toolbox = .{
-            .path = "../zig-wallet-toolbox",
+            .url = "https://github.com/samooth/zig-wallet-toolbox/archive/49c2f416a96e1abf97d4ef901a7278d1002adc22.tar.gz",
+            .hash = "zig_wallet_toolbox-0.1.0-yWfVolP1BADleEjqRBsj38XcHaWp2LnYkw7RzsHS0-hG",
         },
     },
     .paths = .{
