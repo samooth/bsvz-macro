@@ -13,6 +13,9 @@ jobs:
       - name: Checkout bsvz-macro
         uses: actions/checkout@v5
 
+      - name: Clean Zig cache
+        run: rm -rf zig-pkg
+
       - name: Install Zig
         uses: ./.github/actions/setup-zig
         with:
