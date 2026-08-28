@@ -1,0 +1,262 @@
+# bsvz-macro
+
+> **Zero-Cost Macro Assembler for Bitcoin Script (BSV)**  
+> *"You write the loop once, but emit it many times"*
+
+[![Zig](https://img.shields.io/badge/Zig-0.16.0-orange.svg)](https://ziglang.org)
+[![BSV](https://img.shields.io/badge/BSV-Chronicle%20ready-green.svg)](https://bsvblockchain.org)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+`bsvz-macro` is a **wallet-side macro expansion compiler** for Bitcoin Script (BSV). It transforms a high-level symbolic language (parameterized macros) into legacy opcode sequences compatible with the original Bitcoin protocol (2009). The node never sees a macro; it only sees flat, acyclic, deterministic bytecode.
+
+## Philosophy
+
+| Principle | Description |
+|---|---|
+| **Totality** | Every expansion is finite, bounded, and terminates |
+| **Hygiene** | Each macro operates in isolated scope — no leaks, no shadowing |
+| **Zero-Cost** | Macros add zero runtime overhead |
+| **Consensus Compatible** | Output is bit-for-bit identical to hand-written Script |
+| **Auditability** | Source macro + params → reproducible bytecode |
+| **Fail-Fast** | Better not to emit than to emit invalid bytecode |
+
+## Features
+
+- **11 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, `PUSHTX_FRAGMENT`
+- **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
+- **Conditional compilation**: `@bsv`, `@chronicle`, `@btc_strict`, `@version(n)`
+- **Symbolic stack simulator**: Validates stack transitions before emission
+- **Bounds & policy validation**: Enforces consensus and standardness rules
+- **Dual mode**: `compile()` (runtime) and `compileComptime()` (zero-cost at build time)
+- **Real bsvz integration**: Uses `bsvz` ScriptEngine, ASM encoder, and transaction builder directly — **no mocks, no stubs**
+
+## Quick Start
+
+```zig
+const bsvz_macro = @import("bsvz-macro");
+
+// Runtime compilation
+const result = try bsvz_macro.compile(allocator, "OP_XSWAP[3]", .{});
+defer result.deinit(allocator);
+
+// Comptime compilation — zero runtime cost
+const contract = comptime bsvz_macro.compileComptime(
+    "LOOP[5]{ OP_<i> OP_DUP OP_MUL }",
+    .{ .target = .bsv_mainnet },
+) catch unreachable;
+```
+
+## Installation
+
+### Prerequisites
+
+- [Zig 0.16.0+](https://ziglang.org/download/)
+- [bsvz](https://github.com/samooth/bsvz) (sibling directory)
+- [zig-wallet-toolbox](https://github.com/samooth/zig-wallet-toolbox) (sibling directory)
+
+### Directory Layout
+
+```
+workspace/
+├── bsvz/                  # BSV foundation library
+├── zig-wallet-toolbox/    # Wallet toolkit
+└── bsvz-macro/           # This repo
+```
+
+### Build
+
+```bash
+cd bsvz-macro
+zig build
+zig build test
+```
+
+## Usage
+
+### Compile a Macro
+
+```zig
+const std = @import("std");
+const bsvz_macro = @import("bsvz-macro");
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const result = try bsvz_macro.compile(allocator, "OP_HASHCAT", .{
+        .emit_asm = true,
+    });
+    defer result.deinit(allocator);
+
+    std.debug.print("Bytecode: ", .{});
+    for (result.bytecode) |b| std.debug.print("{x:0>2}", .{b});
+    std.debug.print("\nASM: {s}\n", .{result.asm.?});
+    std.debug.print("Max stack: {}\n", .{result.max_stack_height});
+    std.debug.print("Standard: {}\n", .{result.is_standard});
+}
+```
+
+### Loop Unrolling
+
+```zig
+const result = try bsvz_macro.compile(allocator,
+    "LOOP[3]{ OP_<i> OP_ADD }", .{});
+// Expands to: OP_0 OP_ADD OP_1 OP_ADD OP_2 OP_ADD
+```
+
+### Conditional Compilation
+
+```zig
+const result = try bsvz_macro.compile(allocator,
+    "@bsv{ OP_CAT } else { OP_NOP }", .{});
+```
+
+### Integration with bsvz ScriptEngine
+
+```zig
+const bsvz = @import("bsvz");
+const expansion = try bsvz_macro.compile(allocator, source, .{});
+const script = bsvz.script.Script.init(expansion.bytecode);
+
+var engine = bsvz.script.engine.ScriptEngine.init(allocator);
+const exec_result = try engine.execute(script);
+```
+
+### Integration with zig-wallet-toolbox
+
+```zig
+const bsvz_macro = @import("bsvz-macro");
+
+// Add a macro-generated output to a transaction
+var builder = bsvz.transaction.builder.Builder.init(allocator);
+try bsvz_macro.bridge.wallet.addMacroOutput(
+    &builder,
+    "OP_HASH160 0x0000...0000 OP_EQUALVERIFY OP_CHECKSIG",
+    1000,
+    .{},
+);
+```
+
+## Architecture
+
+```
+Source DSL
+    |
+    v
+[Lexer]     → Tokens
+    |
+    v
+[Parser]    → AST
+    |
+    v
+[Expander]  → Bytecode (via MacroTable)
+    |
+    v
+[Simulator] → Stack transitions (symbolic)
+    |
+    v
+[Validator] → Bounds + Policy checks
+    |
+    v
+[Encoder]   → Hex / ASM
+```
+
+## Available Macros
+
+| Macro | Arity | Stack Effect | Expansion |
+|---|---|---|---|
+| `OP_XSWAP[n]` | 1 | `[..., x0, xn]` → `[..., xn, x0]` | `PUSH(n-1) PICK PUSH(n-1) ROLL SWAP DROP` |
+| `OP_XDROP[n]` | 1 | `[..., x0, xn]` → `[...]` | `PUSH(n-1) ROLL DROP` |
+| `OP_XROT[n]` | 1 | `[..., x0, xn]` → `[xn, ..., x0]` | `PUSH(n-1) ROLL` |
+| `OP_HASHCAT` | 0 | `[x]` → `[x \|\| SHA256(x)]` | `DUP SHA256 SWAP CAT` |
+| `IFDUP` | 0 | `[x]` → `[x]` or `[x, x]` | `DUP IF { DUP } ENDIF` |
+| `SAFE_DIV` | 0 | `[a, b]` → `[a / b]` | `SWAP DUP 0NOTEQUAL VERIFY DIV` |
+| `RANGE_CHECK[min,max]` | 2 | `[x]` → `[]` | `DUP min GE SWAP max LE BOOLAND VERIFY` |
+| `P2PKH_FROM_PUBKEY` | 0 | `[sig, pubkey]` → `[]` | `DUP HASH160 <20b> EQUALVERIFY CHECKSIG` |
+| `VERIFY_ALL[n]` | 1 | `[b1...bn]` → `[]` | `BOOLAND...VERIFY` |
+| `VERIFY_ANY[n]` | 1 | `[b1...bn]` → `[]` | `BOOLOR...VERIFY` |
+| `PUSHTX_FRAGMENT[n]` | 1 | `[..., xn]` → `[..., xn \|\| HASH256(xn)]` | `PICK CAT HASH256` |
+
+## DSL Grammar
+
+```ebnf
+script      ::= statement (";" statement)* ";"?
+statement   ::= opcode
+              | macro "[" args "]" ["{" body "}"]
+              | "LOOP" "[" integer "]" "{" body "}"
+              | "@" flag ["(" integer ")"] "{" body "}" ["else" "{" body "}"]
+
+opcode      ::= "OP_" IDENT
+args        ::= arg ("," arg)*
+arg         ::= integer | string | opcode
+body        ::= statement (";" statement)* ";"?
+flag        ::= "bsv" | "chronicle" | "btc_strict" | "version"
+```
+
+## Safety Limits
+
+| Limit | Value |
+|---|---|
+| Max tokens per source | 10,000 |
+| Max opcodes post-expansion | 1,000,000 |
+| Macro recursion depth | 32 |
+| Max loop bound | 1,000 |
+| Script size (consensus) | 1 GB |
+| Script size (policy) | 10 MB |
+| Stack elements | 1,000 |
+| Push size (policy) | 520 B |
+| Push size (Chronicle) | 32 MB |
+
+## API Reference
+
+```zig
+/// Compile source macro to bytecode (runtime)
+pub fn compile(allocator, source, options) MacroError!MacroExpansion;
+
+/// Compile source macro to bytecode (comptime — zero runtime cost)
+pub fn compileComptime(source, options) MacroError!MacroExpansion;
+
+/// Validate stack transitions symbolically
+pub fn validateStack(allocator, bytecode, expected_pre, expected_post) MacroError!void;
+
+/// Bytecode → ASM
+pub fn toAsm(allocator, bytecode) ![]const u8;
+
+/// ASM → Bytecode
+pub fn fromAsm(allocator, asm_source) MacroError![]const u8;
+```
+
+## Testing
+
+```bash
+# All tests
+zig build test
+
+# Specific test suites
+zig test src/lib.zig
+zig test tests/macro_e2e.zig
+zig test tests/canonical.zig
+zig test tests/stack_sim.zig
+```
+
+## WASM Target
+
+```bash
+zig build -Dtarget=wasm32-freestanding
+```
+
+The core is pure Zig with no network or I/O dependencies — fully WASM-compatible.
+
+## Related Projects
+
+| Project | Description |
+|---|---|
+| [bsvz](https://github.com/samooth/bsvz) | BSV foundation library for Zig |
+| [zig-wallet-toolbox](https://github.com/samooth/zig-wallet-toolbox) | Wallet toolkit for BSV |
+| [ts-sdk](https://github.com/bsv-blockchain/ts-sdk) | TypeScript BSV SDK |
+| [go-sdk](https://github.com/bsv-blockchain/go-sdk) | Go BSV SDK |
+
+## License
+
+MIT — part of the `bsvz` / `zig-wallet-toolbox` ecosystem.
