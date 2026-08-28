@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Zig
+        uses: ziglang/setup-zig@v2
+        with:
+          version: "0.16.0"
+
+      # bsvz-macro depends on two sibling repositories via local path
+      # (see build.zig.zon). Check them out as siblings so `../bsvz` and
+      # `../zig-wallet-toolbox` resolve as the compiler expects.
+      - name: Checkout bsvz-macro
+        uses: actions/checkout@v4
+        with:
+          path: bsvz-macro
+
+      - name: Checkout bsvz
+        uses: actions/checkout@v4
+        with:
+          repository: t0m4s/bsvz
+          path: bsvz
+
+      - name: Checkout zig-wallet-toolbox
+        uses: actions/checkout@v4
+        with:
+          repository: t0m4s/zig-wallet-toolbox
+          path: zig-wallet-toolbox
+
+      - name: Run tests
+        working-directory: bsvz-macro
+        run: zig build test
+
+      - name: Run tests with release-safe (sanitizers)
+        working-directory: bsvz-macro
+        run: zig build test -Doptimize=ReleaseSafe

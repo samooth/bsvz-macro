@@ -111,6 +111,63 @@ pub fn expectDeterministicHash(allocator: std.mem.Allocator, source: []const u8)
     }
 }
 
+/// Assert that compiling a source twice yields identical bytecode (determinism).
+pub fn expectDeterministicBytecode(allocator: std.mem.Allocator, source: []const u8) !void {
+    const result1 = try compileDefault(allocator, source);
+    defer result1.deinit(allocator);
+    const result2 = try compileDefault(allocator, source);
+    defer result2.deinit(allocator);
+    try expectBytesEqual(result1.bytecode, result2.bytecode);
+}
+
+/// Assert that two sources compile to identical bytecode.
+pub fn expectBytecodeEquals(allocator: std.mem.Allocator, a: []const u8, b: []const u8) !void {
+    const ra = try compileDefault(allocator, a);
+    defer ra.deinit(allocator);
+    const rb = try compileDefault(allocator, b);
+    defer rb.deinit(allocator);
+    try expectBytesEqual(ra.bytecode, rb.bytecode);
+}
+
+/// Assert that the hash of a source changes when compile options change.
+pub fn expectHashChangesWithOptions(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    base: bsvz_macro.CompileOptions,
+    variant: bsvz_macro.CompileOptions,
+) !void {
+    const rb = try compileWith(allocator, source, base);
+    defer rb.deinit(allocator);
+    const rv = try compileWith(allocator, source, variant);
+    defer rv.deinit(allocator);
+    if (std.mem.eql(u8, &rb.hash, &rv.hash)) {
+        return error.TestExpectedNonEqual;
+    }
+}
+
+/// Lightweight deterministic PRNG (xorshift32) for property-based test inputs.
+pub const Prng = struct {
+    state: u32,
+
+    pub fn init(seed: u32) Prng {
+        return .{ .state = if (seed == 0) 0x9e3779b9 else seed };
+    }
+
+    pub fn next(self: *Prng) u32 {
+        var x = self.state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.state = x;
+        return x;
+    }
+
+    /// Return a value in [0, max).
+    pub fn range(self: *Prng, max: u32) u32 {
+        return self.next() % max;
+    }
+};
+
 // Tests for the helpers themselves
 test "helpers: compileDefault works" {
     const allocator = testing.allocator;
@@ -145,4 +202,31 @@ test "helpers: repeatChar works" {
 
 test "helpers: expectBytesEqual works" {
     try expectBytesEqual("hello", "hello");
+}
+
+test "helpers: expectDeterministicBytecode works" {
+    const allocator = testing.allocator;
+    try expectDeterministicBytecode(allocator, "OP_DUP OP_HASH160 OP_EQUAL");
+}
+
+test "helpers: expectBytecodeEquals works" {
+    const allocator = testing.allocator;
+    try expectBytecodeEquals(allocator, "OP_DUP OP_DROP", "OP_DUP; OP_DROP");
+}
+
+test "helpers: expectHashChangesWithOptions works" {
+    const allocator = testing.allocator;
+    try expectHashChangesWithOptions(allocator, "OP_DUP", .{}, .{ .emit_asm = true });
+}
+
+test "helpers: Prng is deterministic" {
+    var a = Prng.init(0x1234);
+    var b = Prng.init(0x1234);
+    var i: usize = 0;
+    while (i < 100) : (i += 1) {
+        try testing.expectEqual(a.next(), b.next());
+    }
+    // Different seed -> different stream (with overwhelming probability).
+    var c = Prng.init(0x5678);
+    try testing.expect(a.next() != c.next());
 }
