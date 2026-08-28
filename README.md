@@ -22,7 +22,7 @@
 
 ## Inspiration
 
-This project is a direct implementation of the ideas presented in the article **"Macro Expansion in Bitcoin Script"** published on Substack. The article formalizes Bitcoin Script as a two-stack pushdown automaton (2PDA) — computationally equivalent to a Turing machine when all control flow is statically bounded and unrolled at compile time — and proposes a wallet-side macro expansion compiler that transforms high-level symbolic macros into flat, acyclic, deterministic legacy opcode sequences.
+This project is a direct implementation of the ideas presented in the article [**"Macro Expansion in Bitcoin Script"**](https://singulargrit.substack.com/p/macro-expansion-in-bitcoin-script) published on Substack. The article formalizes Bitcoin Script as a two-stack pushdown automaton (2PDA) — computationally equivalent to a Turing machine when all control flow is statically bounded and unrolled at compile time — and proposes a wallet-side macro expansion compiler that transforms high-level symbolic macros into flat, acyclic, deterministic legacy opcode sequences.
 
 > *"You write the loop once, but emit it many times — fully expanded, and verifiable by the node interpreter as a static script."*
 
