@@ -9,16 +9,11 @@
             .hash = "bsvz-0.1.0-wvsL-dviFQDU2Al1QQBlT1s8lDJPmNDXLWdg1-1Q4fBw",
         },
         .zig_wallet_toolbox = .{
-            .url = "https://github.com/samooth/zig-wallet-toolbox/archive/49c2f416a96e1abf97d4ef901a7278d1002adc22.tar.gz",
-            .hash = "zig_wallet_toolbox-0.1.0-yWfVolP1BADleEjqRBsj38XcHaWp2LnYkw7RzsHS0-hG",
+            .url = "https://github.com/samooth/zig-wallet-toolbox/archive/7d502d4c275cb7c8db296dd341c12e81ccc65283.tar.gz",
+            .hash = "zig_wallet_toolbox-0.1.0-yWfVoisBBQB8hkGbRTel7xNPkQLuy0r3L_yBK4iVk1l-",
         },
     },
-    .overrides = .{
-        .sqlite = .{
-            .url = "https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip",
-            .hash = "N-V-__8AAGVtrgCcOcmjrOJnagmnRyMrcKaOo09KbU-vu8w8",
-        },
-    },
+.overrides = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
