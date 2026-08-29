@@ -2,6 +2,47 @@
 
 Source: https://nchain.com/wp-content/uploads/2022/03/WP1605_PUSHTX-and-its-Building-Blocks.pdf
 
+## Mapping to bsvz-macros
+
+The following table maps each script segment defined in the white paper to
+the corresponding macro in bsvz-macro. Every macro below expands to the
+exact opcode sequence shown in WP1605 (with the k = a = 1 optimisation
+for `[sign]`). Constants such as `Gx` and `n` are hardcoded secp256k1
+parameters.
+
+| WP1605 segment | Macro | Notes |
+|---|---|---|
+| `[toCanonical]1` | `PUSHTX_TOCANONICAL` | Forces `s ∈ [0, n/2]`. |
+| `[concatenations]` | `PUSHTX_CONCATENATIONS` | Builds `30 \|\| len \|\| 02 20 Gx 02 \|\| s`. |
+| `[toDER]` | `PUSHTX_TODER` | Inlined: `PUSHTX_TOCANONICAL` + `PUSHTX_CONCATENATIONS`. |
+| `[sign]` | `PUSHTX_SIGN[sighash_flag]` | k = a = 1. Expects `z` (HASH256 of preimage) on top. |
+| `[outputsRequest]` | `PUSHTX_OUTPUTS_REQUEST[item8_hex, items10_11_hex]` | Hex string args, even length. |
+| Preimage fragment (item 9 pattern) | `PUSHTX_FRAGMENT[n]` | PICK DUP HASH256 CAT. |
+
+### Example: PELS locking script from §1.3
+
+```text
+PUSHTX_OUTPUTS_REQUEST[0xffffffff, 0x0000000001000000]
+PUSHTX_SIGN[1]
+OP_CHECKSIGVERIFY
+OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP OP_8
+OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP
+OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG
+```
+
+The hex literals for `item 8` and `items 10 || 11` are encoded in little-endian
+and concatenated respectively. For SIGHASH_ALL (`0x01`) the second argument is
+`0x00000000 01000000` (locktime = 0, then sighash = 1).
+
+### Known limitation: symbolic simulator
+
+The PUSHTX macros push 32-byte secp256k1 constants (e.g. `n/2`, `n`, `Gx`)
+as raw byte arrays. The bsvz-macro symbolic simulator enforces a strict
+type system that flags these as non-integer when they reach
+`OP_GREATERTHAN` / `OP_ADD` / etc. The expansions are valid Bitcoin Script
+and execute correctly on-chain; only the in-process simulator rejects
+them. The unit tests assert `error.SimError` for the affected macros.
+
 ## Extracted Content
 
 PUSHTX and its Building Blocks

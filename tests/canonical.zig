@@ -62,6 +62,42 @@ test "canonical: PUSHTX_FRAGMENT matches WP1605 §1.2 pattern" {
     try testing.expectEqualSlices(u8, &expected, result.bytecode);
 }
 
+test "canonical: PUSHTX_OUTPUTS_REQUEST matches WP1605 §1.3 pattern" {
+    // The [outputsRequest] block from the white paper PELS example:
+    //   OP_2DUP OP_HASH256 OP_SWAP <item 8> OP_CAT OP_SWAP OP_CAT <item 10 and 11> OP_CAT
+    // Here item 8 = 0xffffffff (4 bytes) and items 10+11 = 0x00000000 01000000 (8 bytes).
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(
+        allocator,
+        "PUSHTX_OUTPUTS_REQUEST[0xffffffff, 0x0000000001000000]",
+        .{},
+    );
+    defer result.deinit(allocator);
+    // Expected opcodes: OP_2DUP OP_HASH256 OP_SWAP <push 4B> OP_CAT OP_SWAP OP_CAT <push 8B> OP_CAT
+    // OP_2DUP=0x6e, OP_HASH256=0xaa, OP_SWAP=0x7c, OP_CAT=0x7e
+    // <push 4B 0xff..> = 04 ff ff ff ff
+    // <push 8B 0x..>  = 08 00 00 00 00 01 00 00 00
+    const expected = [_]u8{
+        0x6e, 0xaa, 0x7c,
+        0x04, 0xff, 0xff, 0xff, 0xff,
+        0x7e, 0x7c, 0x7e,
+        0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x7e,
+    };
+    try testing.expectEqualSlices(u8, &expected, result.bytecode);
+}
+
+test "canonical: PUSHTX_CONCATENATIONS structure matches WP1605" {
+    // The [concatenations] block: OP_SIZE OP_DUP <0x24> OP_ADD <0x30> OP_SWAP OP_CAT
+    //   <push 34B: 02 20 || Gx || 02> OP_CAT OP_SWAP OP_CAT OP_SWAP OP_CAT
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_CONCATENATIONS", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+    // First op should be OP_SIZE (0x82 in bsvz).
+    try testing.expectEqual(@as(u8, 0x82), result.bytecode[0]);
+}
+
 test "canonical: conditional @bsv" {
     const allocator = testing.allocator;
     const result = try bsvz_macro.compile(allocator, "@bsv{ OP_CAT }", .{});

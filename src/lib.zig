@@ -59,7 +59,8 @@ pub fn compile(
     defer {
         for (tokens) |t| {
             switch (t.token) {
-                .macro_name, .string, .iterator_var => |v| allocator.free(v),
+                .macro_name, .iterator_var => |v| allocator.free(v),
+                .string => {},
                 else => {},
             }
         }

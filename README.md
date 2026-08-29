@@ -180,6 +180,11 @@ Source DSL
 | `VERIFY_ALL[n]` | 1 | `[b1...bn]` → `[]` | `BOOLAND...VERIFY` |
 | `VERIFY_ANY[n]` | 1 | `[b1...bn]` → `[]` | `BOOLOR...VERIFY` |
 | `PUSHTX_FRAGMENT[n]` | 1 | `[..., xn]` → `[..., xn, xn \|\| HASH256(xn)]` | `PICK DUP HASH256 CAT` |
+| `PUSHTX_TOCANONICAL` | 0 | `[s]` → `[s' ∈ [0, n/2]]` | `DUP n/2 GT IF n SWAP SUB ENDIF` |
+| `PUSHTX_CONCATENATIONS` | 0 | `[r, s]` → `[DER(r,s)]` | `SIZE DUP 0x24 ADD 0x30 SWAP CAT 0x0220\|\|Gx\|\|02 CAT SWAP CAT SWAP CAT` |
+| `PUSHTX_TODER` | 0 | `[r, s]` → `[DER(r,s)]` | `PUSHTX_TOCANONICAL PUSHTX_CONCATENATIONS` |
+| `PUSHTX_SIGN[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx ADD n MOD PUSHTX_TODER <sighash> CAT Gcomp CAT` |
+| `PUSHTX_OUTPUTS_REQUEST[item8, items10_11]` | 2 | `[..., H, F]` → `[..., F, H, HASH256(H), ...]` | `2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10_11> CAT` |
 
 ## DSL Grammar
 

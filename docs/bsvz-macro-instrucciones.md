@@ -205,6 +205,27 @@ Helper para construir PUSHTX según WP1605 (nChain, 2021) sección 1.2: pick a p
 PUSHTX_FRAGMENT[3]
 ```
 
+### PUSHTX_TOCANONICAL
+Bloque [toCanonical] de WP1605 §1.1: fuerza s al rango [0, n/2] reemplazando s con n-s cuando s > n/2.
+
+### PUSHTX_CONCATENATIONS
+Bloque [concatenations] de WP1605 §1.1: construye la estructura DER para (r, s).
+
+### PUSHTX_TODER
+Bloque [toDER] de WP1605 §1.1: canonicaliza s y construye la estructura DER.
+
+### PUSHTX_SIGN[sighash_flag]
+Bloque [sign] de WP1605 §1.1 con la optimización k = a = 1. El parámetro `sighash_flag` es la bandera sighash en formato little-endian (1 para SIGHASH_ALL, 0x83 para SINGLE|ANYONECANPAY, etc.).
+```
+PUSHTX_SIGN[1]
+```
+
+### PUSHTX_OUTPUTS_REQUEST[item8_hex, items10_11_hex]
+Bloque [outputsRequest] de WP1605 §1.3. Ambos argumentos son strings hexadecimales (con o sin prefijo `0x`, longitud par) que se empujan como bytes crudos. `item8_hex` es la secuencia de 4 bytes del item 8 (sequence number), e `items10_11_hex` es la concatenación de los items 10 y 11 (locktime y sighash, 8 bytes en total).
+```
+PUSHTX_OUTPUTS_REQUEST[0xffffffff, 0x0000000001000000]
+```
+
 ## Sintaxis del DSL
 
 ```ebnf
