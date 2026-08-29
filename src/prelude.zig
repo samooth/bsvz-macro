@@ -182,11 +182,15 @@ fn pushTxFragmentExpand(allocator: std.mem.Allocator, args: []const AstNode, bod
     if (n < 1 or n > 10) return ExpandError.TypeMismatch;
     var out = std.ArrayListUnmanaged(u8){};
     defer out.deinit(allocator);
-    // PUSHTX helper: XSWAP n; CAT; HASH256
+    // PUSHTX helper: PICK n; DUP; HASH256; CAT
+    // Per WP1605 (nChain, 2021) section 1.2 message construction:
+    // access the item at depth n, duplicate it, hash the copy, and concatenate
+    // the original with the hash to form a fragment suitable for the preimage.
     emitMinimalPushInt(&out, allocator, n) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_PICK);
-    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_DUP);
     try emitOpcode(&out, allocator, .OP_HASH256);
+    try emitOpcode(&out, allocator, .OP_CAT);
     return out.toOwnedSlice(allocator);
 }
 

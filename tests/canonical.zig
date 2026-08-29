@@ -46,7 +46,20 @@ test "canonical: PUSHTX_FRAGMENT" {
     const allocator = testing.allocator;
     const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[3]", .{});
     defer result.deinit(allocator);
-    try testing.expect(result.bytecode.len > 0);
+    // PUSHTX_FRAGMENT[n] expands to: <push n> PICK DUP HASH256 CAT = 5 bytes
+    try testing.expectEqual(@as(u32, 5), result.byte_length);
+}
+
+test "canonical: PUSHTX_FRAGMENT matches WP1605 §1.2 pattern" {
+    // Integration check: the expansion for PUSHTX_FRAGMENT[3] is
+    //   0x53 (OP_3) 0x79 (OP_PICK) 0x76 (OP_DUP) 0xAA (OP_HASH256) 0x7E (OP_CAT)
+    // matching the pick-dup-hash-cat pattern used throughout the white paper
+    // for constructing preimage fragments (e.g. item 9, hash of outputs).
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[3]", .{});
+    defer result.deinit(allocator);
+    const expected = [_]u8{ 0x53, 0x79, 0x76, 0xAA, 0x7E };
+    try testing.expectEqualSlices(u8, &expected, result.bytecode);
 }
 
 test "canonical: conditional @bsv" {

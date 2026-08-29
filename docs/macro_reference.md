@@ -63,10 +63,10 @@ Verify that at least one of n boolean items is true.
 - Expansion: BOOLOR...VERIFY
 
 ### PUSHTX_FRAGMENT[n]
-PUSHTX helper: pick element at depth n, cat, hash256.
+PUSHTX helper per WP1605 (nChain, 2021) section 1.2: pick element at depth n, duplicate it, hash the copy, and concatenate the original with the hash to form a preimage fragment.
 - Arity: 1 (integer depth 1-10)
-- Stack: [..., xn] -> [..., xn || HASH256(xn)]
-- Expansion: PICK CAT HASH256
+- Stack: [..., xn] -> [..., xn, xn || HASH256(xn)]
+- Expansion: PICK DUP HASH256 CAT
 
 ## DSL Syntax
 

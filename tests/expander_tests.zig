@@ -111,6 +111,40 @@ test "expander: PUSHTX_FRAGMENT with value > 10 fails" {
     try testing.expectError(error.ExpandError, result);
 }
 
+test "expander: PUSHTX_FRAGMENT[1] emits PICK DUP HASH256 CAT" {
+    // Per WP1605 (nChain, 2021) section 1.2: PUSHTX_FRAGMENT[n] expands to
+    //   PICK n; DUP; HASH256; CAT
+    // which produces xn || HASH256(xn) on top of the stack, keeping xn in place.
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[1]", .{});
+    defer result.deinit(allocator);
+
+    // 0x51 = OP_1, 0x79 = OP_PICK, 0x76 = OP_DUP,
+    //        0xAA = OP_HASH256, 0x7E = OP_CAT
+    const expected = [_]u8{ 0x51, 0x79, 0x76, 0xAA, 0x7E };
+    try testing.expectEqualSlices(u8, &expected, result.bytecode);
+}
+
+test "expander: PUSHTX_FRAGMENT[3] emits expected bytecode" {
+    // n=3 is encoded as 0x53 (OP_3 = 0x50 + 3)
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[3]", .{});
+    defer result.deinit(allocator);
+
+    const expected = [_]u8{ 0x53, 0x79, 0x76, 0xAA, 0x7E };
+    try testing.expectEqualSlices(u8, &expected, result.bytecode);
+}
+
+test "expander: PUSHTX_FRAGMENT[10] emits expected bytecode" {
+    // n=10 is encoded as 0x5A (OP_10 = 0x50 + 10)
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[10]", .{});
+    defer result.deinit(allocator);
+
+    const expected = [_]u8{ 0x5A, 0x79, 0x76, 0xAA, 0x7E };
+    try testing.expectEqualSlices(u8, &expected, result.bytecode);
+}
+
 test "expander: OP_XSWAP with negative arg fails" {
     const allocator = testing.allocator;
     const result = bsvz_macro.compile(allocator, "OP_XSWAP[-1]", .{});

@@ -179,7 +179,7 @@ Source DSL
 | `P2PKH_FROM_PUBKEY` | 0 | `[sig, pubkey]` → `[]` | `DUP HASH160 <20b> EQUALVERIFY CHECKSIG` |
 | `VERIFY_ALL[n]` | 1 | `[b1...bn]` → `[]` | `BOOLAND...VERIFY` |
 | `VERIFY_ANY[n]` | 1 | `[b1...bn]` → `[]` | `BOOLOR...VERIFY` |
-| `PUSHTX_FRAGMENT[n]` | 1 | `[..., xn]` → `[..., xn \|\| HASH256(xn)]` | `PICK CAT HASH256` |
+| `PUSHTX_FRAGMENT[n]` | 1 | `[..., xn]` → `[..., xn, xn \|\| HASH256(xn)]` | `PICK DUP HASH256 CAT` |
 
 ## DSL Grammar
 

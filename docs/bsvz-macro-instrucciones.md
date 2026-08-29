@@ -200,7 +200,7 @@ VERIFY_ANY[2]
 ```
 
 ### PUSHTX_FRAGMENT[n]
-Helper para construir PUSHTX: pick, cat, hash256.
+Helper para construir PUSHTX según WP1605 (nChain, 2021) sección 1.2: pick a profundidad n, duplicar, hashear la copia, y concatenar el original con el hash.
 ```
 PUSHTX_FRAGMENT[3]
 ```

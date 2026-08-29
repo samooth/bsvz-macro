@@ -149,9 +149,12 @@ test "simulator: PUSHTX_FRAGMENT[10] picks below the pre-populated stack" {
     const allocator = testing.allocator;
     // Picking at depth 10 forces 7 caller-supplied items to be modeled beyond
     // the 4 pre-populated ones, so the reported height grows accordingly.
+    // PICK 10 grows the stack to 12 (4 pre + 7 materialized + 1 copied),
+    // DUP then pushes to 13, HASH256 is a no-op, CAT drops to 12.
+    // Reported height = 13 - 4 = 9.
     const result = try bsvz_macro.compile(allocator, "PUSHTX_FRAGMENT[10]", .{});
     defer result.deinit(allocator);
-    try testing.expectEqual(@as(u16, 8), result.max_stack_height);
+    try testing.expectEqual(@as(u16, 9), result.max_stack_height);
 }
 
 test "simulator: depth beyond max_stack_elements is rejected" {
