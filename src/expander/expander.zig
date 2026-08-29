@@ -152,7 +152,7 @@ pub const Expander = struct {
         var out = std.ArrayListUnmanaged(u8){};
         defer out.deinit(allocator);
 
-        for (0..loop.bound) |i| {
+        for (0..@as(usize, @intCast(loop.bound))) |i| {
             const substituted = try substituteIterator(allocator, loop.body, loop.iterator_var, i);
             defer {
                 for (substituted) |node| deinitNode(allocator, node);

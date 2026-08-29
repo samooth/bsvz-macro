@@ -251,11 +251,33 @@ zig test tests/stack_sim.zig
 
 ## WASM Target
 
+The core is pure Zig with no network or I/O dependencies, so it compiles to a
+self-contained wasm32-freestanding module (~70 KB, zero imports, no libc).
+
 ```bash
-zig build -Dtarget=wasm32-freestanding
+zig build wasm
+# -> zig-out/wasm/bsvz_macro.wasm
 ```
 
-The core is pure Zig with no network or I/O dependencies — fully WASM-compatible.
+JS bindings live in `web/` (ESM + TypeScript types):
+
+```js
+import { load } from "./web/bsvz-macro.js";
+
+const m = await load("./zig-out/wasm/bsvz_macro.wasm");
+const result = m.compile("SAFE_DIV", { emitAsm: true });
+// result: { bytecode: Uint8Array, asmText, hash, opcodeCount,
+//           byteLength, maxStackHeight, isStandard }
+```
+
+Run the Node smoke test against the built artifact:
+
+```bash
+zig build wasm && node web/test/smoke.mjs
+```
+
+The wasm module graph intentionally excludes `zig-wallet-toolbox` (it is not
+referenced by the macro compiler); only `bsvz` is imported.
 
 ## Related Projects
 

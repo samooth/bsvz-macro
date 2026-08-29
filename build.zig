@@ -47,6 +47,35 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
+    // WASM artifact for the web. The module graph intentionally excludes
+    // zig-wallet-toolbox (never imported by the macro compiler); only bsvz
+    // is imported. Built as a no-entry executable so the module owns its
+    // memory (no env imports, browser-friendly).
+    const wasm_step = b.step("wasm", "Build the wasm32 module for web usage");
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    const wasm_optimize = b.option(std.builtin.OptimizeMode, "wasm-optimize", "Optimize mode for the wasm artifact (default: ReleaseSmall)") orelse .ReleaseSmall;
+    const wasm_strip = b.option(bool, "wasm-strip", "Strip debug info from the wasm artifact (default: true)") orelse true;
+    const wasm_module = b.createModule(.{
+        .root_source_file = b.path("src/wasm.zig"),
+        .target = wasm_target,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
+    });
+    wasm_module.addImport("bsvz-macro", macro_mod);
+    const wasm_lib = b.addExecutable(.{
+        .name = "bsvz_macro",
+        .root_module = wasm_module,
+    });
+    wasm_lib.entry = .disabled;
+    wasm_lib.rdynamic = true;
+    const wasm_install = b.addInstallArtifact(wasm_lib, .{
+        .dest_dir = .{ .override = .{ .custom = "wasm" } },
+    });
+    wasm_step.dependOn(&wasm_install.step);
+
 // Tests
      const test_step = b.step("test", "Run all tests");
 

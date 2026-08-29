@@ -29,3 +29,24 @@ jobs:
 
       - name: Run tests with release-safe (sanitizers)
         run: zig build test -Doptimize=ReleaseSafe
+
+  wasm:
+    name: WASM build & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout bsvz-macro
+        uses: actions/checkout@v5
+
+      - name: Clean Zig cache
+        run: rm -rf zig-pkg
+
+      - name: Install Zig
+        uses: ./.github/actions/setup-zig
+        with:
+          version: "0.16.0"
+
+      - name: Build wasm artifact
+        run: zig build wasm
+
+      - name: Node smoke test
+        run: node web/test/smoke.mjs

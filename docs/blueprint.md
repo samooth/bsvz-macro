@@ -795,8 +795,8 @@ pub const xswap3_case = MacroTestCase{
 ### Fase 7: Optimizacion + Polish (Semana 11-12)
 - [ ] Fuzzing con `std.testing.fuzz`
 - [ ] Profile-guided optimization del expander
-- [ ] WASM target: `zig build -Dtarget=wasm32-freestanding`
-- [ ] JS bindings para consumo desde wallets web
+- [x] WASM target: `zig build wasm` produce `zig-out/wasm/bsvz_macro.wasm` (wasm32-freestanding, ~70 KB, sin imports, sin libc; excluye `zig-wallet-toolbox` del grafo)
+- [x] JS bindings para consumo desde wallets web (`web/bsvz-macro.js` + `web/bsvz-macro.d.ts`; smoke test `node web/test/smoke.mjs`)
 - [ ] Release v0.1.0
 
 ---
