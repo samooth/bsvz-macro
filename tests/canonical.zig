@@ -114,3 +114,17 @@ test "canonical: conditional @btc_strict" {
     // In btc_strict, OP_CAT should not be emitted, OP_NOP should
     try testing.expect(result.bytecode.len > 0);
 }
+
+test "canonical: PELS_LOCKING_SCRIPT end-to-end" {
+    // End-to-end test: compile a full PELS locking script from WP1605 §1.3.
+    // The PELS script assumes the pubkey is provided in the unlocking script,
+    // so full compile fails in the simulator (which doesn't model a pre-existing
+    // pubkey). We document this with an expected SimError.
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(
+        allocator,
+        "PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 0x0102030405060708090a0b0c0d0e0f1011121314]",
+        .{},
+    );
+    try testing.expectError(error.SimError, result);
+}

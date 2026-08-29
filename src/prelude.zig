@@ -369,6 +369,60 @@ fn pushTxOutputsRequestExpand(allocator: std.mem.Allocator, args: []const AstNod
     return out.toOwnedSlice(allocator);
 }
 
+fn pelsLockingScriptExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    if (args.len != 4) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+    _ = try requireStringArg(args[1]);
+    _ = try requireStringArg(args[2]);
+    const pk_b_hash160_hex = try requireStringArg(args[3]);
+
+    const pk_bytes = decodeHexAlloc(allocator, pk_b_hash160_hex) catch return ExpandError.TypeMismatch;
+    defer allocator.free(pk_bytes);
+    if (pk_bytes.len != 20) return ExpandError.TypeMismatch;
+
+    var out = std.ArrayListUnmanaged(u8){};
+    defer out.deinit(allocator);
+
+    const orq = try pushTxOutputsRequestExpand(allocator, args[1..3], null, table);
+    defer allocator.free(orq);
+    try out.appendSlice(allocator, orq);
+
+    const sign_args = [_]AstNode{args[0]};
+    const sign = try pushTxSignExpand(allocator, &sign_args, null, table);
+    defer allocator.free(sign);
+    try out.appendSlice(allocator, sign);
+
+    try emitOpcode(&out, allocator, .OP_CHECKSIGVERIFY);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    emitMinimalPushInt(&out, allocator, 0x68) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_SPLIT);
+    try emitOpcode(&out, allocator, .OP_NIP);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    emitMinimalPushInt(&out, allocator, 0x8) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_SPLIT);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, .OP_DUP);
+    try emitOpcode(&out, allocator, .OP_HASH160);
+    try emitPushBytes(&out, allocator, pk_bytes);
+    try emitOpcode(&out, allocator, .OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, .OP_CHECKSIG);
+    return out.toOwnedSlice(allocator);
+}
+
+fn decodeHexAlloc(allocator: std.mem.Allocator, raw: []const u8) ![]u8 {
+    const hex_str = if (raw.len >= 2 and raw[0] == '0' and (raw[1] == 'x' or raw[1] == 'X'))
+        raw[2..]
+    else
+        raw;
+    if (hex_str.len == 0 or (hex_str.len % 2) != 0) return error.InvalidHex;
+    const out = try allocator.alloc(u8, hex_str.len / 2);
+    if (!decodeHex(out, hex_str)) return error.InvalidHex;
+    return out;
+}
+
 pub fn registerCanonicalMacros(table: *MacroTable) !void {
     try table.register("OP_XSWAP", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = xswapExpand });
     try table.register("OP_XDROP", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = xdropExpand });
@@ -386,4 +440,5 @@ pub fn registerCanonicalMacros(table: *MacroTable) !void {
     try table.register("PUSHTX_TODER", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxToderExpand });
     try table.register("PUSHTX_SIGN", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = pushTxSignExpand });
     try table.register("PUSHTX_OUTPUTS_REQUEST", .{ .arity = 2, .param_types = &.{ .string, .string }, .expand_fn = pushTxOutputsRequestExpand });
+    try table.register("PELS_LOCKING_SCRIPT", .{ .arity = 4, .param_types = &.{ .integer, .string, .string, .string }, .expand_fn = pelsLockingScriptExpand });
 }

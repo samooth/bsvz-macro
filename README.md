@@ -185,6 +185,7 @@ Source DSL
 | `PUSHTX_TODER` | 0 | `[r, s]` → `[DER(r,s)]` | `PUSHTX_TOCANONICAL PUSHTX_CONCATENATIONS` |
 | `PUSHTX_SIGN[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx ADD n MOD PUSHTX_TODER <sighash> CAT Gcomp CAT` |
 | `PUSHTX_OUTPUTS_REQUEST[item8, items10_11]` | 2 | `[..., H, F]` → `[..., F, H, HASH256(H), ...]` | `2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10_11> CAT` |
+| `PELS_LOCKING_SCRIPT[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script) | `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
 
 ## DSL Grammar
 

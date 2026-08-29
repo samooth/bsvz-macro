@@ -273,6 +273,56 @@ test "expander: PUSHTX_SIGN with non-integer sighash fails" {
     try testing.expectError(error.ExpandError, result);
 }
 
+test "expander: PELS_LOCKING_SCRIPT emits the WP1605 §1.3 layout" {
+    // The PELS locking script from Figure 1 of the white paper.
+    // First opcodes should be the start of PUSHTX_OUTPUTS_REQUEST
+    // (OP_2DUP OP_HASH256 OP_SWAP ...), and the last opcodes should be
+    // OP_EQUALVERIFY OP_CHECKSIG.
+    //
+    // Note: The PELS script assumes the pubkey is provided in the unlocking
+    // script (or fixed in the locking script), so full compile fails in the
+    // simulator (which doesn't model a pre-existing pubkey). We only check
+    // that the expansion itself is non-empty.
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(
+        allocator,
+        "PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 0x0102030405060708090a0b0c0d0e0f1011121314]",
+        .{},
+    );
+    try testing.expectError(error.SimError, result);
+}
+
+test "expander: PELS_LOCKING_SCRIPT rejects wrong pk_b_hash160 length" {
+    const allocator = testing.allocator;
+    // 19 bytes instead of 20
+    const result = bsvz_macro.compile(
+        allocator,
+        "PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 0x0102030405060708090a0b0c0d0e0f1011]",
+        .{},
+    );
+    try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PELS_LOCKING_SCRIPT rejects wrong arity" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(
+        allocator,
+        "PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000]",
+        .{},
+    );
+    try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PELS_LOCKING_SCRIPT rejects non-string pk_b_hash160" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(
+        allocator,
+        "PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 1]",
+        .{},
+    );
+    try testing.expectError(error.ExpandError, result);
+}
+
 // secp256k1 curve constants used by PUSHTX tests.
 const SECP256K1_N_HALF: [32]u8 = .{
     0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,

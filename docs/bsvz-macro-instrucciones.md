@@ -226,6 +226,12 @@ Bloque [outputsRequest] de WP1605 §1.3. Ambos argumentos son strings hexadecima
 PUSHTX_OUTPUTS_REQUEST[0xffffffff, 0x0000000001000000]
 ```
 
+### PELS_LOCKING_SCRIPT[sighash_flag, item8_hex, items10_11_hex, pk_b_hash160_hex]
+Script completo de Perpetually Enforcing Locking Script de WP1605 §1.3 (Figura 1). Compone `PUSHTX_OUTPUTS_REQUEST` + `PUSHTX_SIGN` + la cola fija de OP_SWAP / OP_SPLIT / OP_EQUALVERIFY / OP_HASH160 / OP_CHECKSIG. El argumento `pk_b_hash160_hex` debe decodificarse a exactamente 20 bytes.
+```
+PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 0x0102030405060708090a0b0c0d0e0f1011121314]
+```
+
 ## Sintaxis del DSL
 
 ```ebnf

@@ -21,18 +21,34 @@ parameters.
 
 ### Example: PELS locking script from §1.3
 
+The canonical PELS example from the white paper can now be emitted in one
+shot with the `PELS_LOCKING_SCRIPT` macro:
+
+```text
+PELS_LOCKING_SCRIPT[1, 0xffffffff, 0x0000000001000000, 0x0102030405060708090a0b0c0d0e0f1011121314]
+```
+
+This expands to exactly the locking script from Figure 1:
+
 ```text
 PUSHTX_OUTPUTS_REQUEST[0xffffffff, 0x0000000001000000]
 PUSHTX_SIGN[1]
 OP_CHECKSIGVERIFY
-OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP OP_8
-OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP
+OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT
+OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP
 OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG
 ```
 
-The hex literals for `item 8` and `items 10 || 11` are encoded in little-endian
-and concatenated respectively. For SIGHASH_ALL (`0x01`) the second argument is
-`0x00000000 01000000` (locktime = 0, then sighash = 1).
+The four arguments are:
+1. `sighash_flag` (integer) — SIGHASH flag, e.g. `1` for SIGHASH_ALL
+2. `item8_hex` (string) — 4-byte sequence number in little-endian
+3. `items10_11_hex` (string) — 8-byte locktime || sighash
+4. `pk_b_hash160_hex` (string) — 20-byte hash160 of the spender's public key
+
+Note: the PELS script assumes the spenders pubkey is already on the stack
+(from the unlocking script); the symbolic simulator does not model a
+pre-existing pubkey and will return `error.SimError` for a bare
+`PELS_LOCKING_SCRIPT` invocation.
 
 ### Numeric byte pushes
 

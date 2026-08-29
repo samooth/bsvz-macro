@@ -98,6 +98,11 @@ PUSHTX [outputsRequest] block per WP1605 §1.3. Constructs the message fragment 
 - Stack: [..., item1..7, serialised_outputs] -> [..., item1..7, serialised_outputs, item9, item8, items10||11]
 - Expansion: 2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10||11> CAT
 
+### PELS_LOCKING_SCRIPT[sighash_flag, item8_hex, items10_11_hex, pk_b_hash160_hex]
+Full Perpetually Enforcing Locking Script from WP1605 §1.3 (Figure 1). Composes `PUSHTX_OUTPUTS_REQUEST` + `PUSHTX_SIGN` + the fixed OP_SWAP / OP_SPLIT / OP_EQUALVERIFY / OP_HASH160 / OP_CHECKSIG tail. The `pk_b_hash160_hex` argument must decode to exactly 20 bytes. Note: the PELS script assumes the spenders pubkey is already on the stack (from the unlocking script); the symbolic simulator does not model a pre-existing pubkey and will return `error.SimError`.
+- Arity: 4 (integer, string, string, string)
+- Expansion: `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
+
 ## DSL Syntax
 
 ```
