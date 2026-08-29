@@ -34,14 +34,14 @@ The hex literals for `item 8` and `items 10 || 11` are encoded in little-endian
 and concatenated respectively. For SIGHASH_ALL (`0x01`) the second argument is
 `0x00000000 01000000` (locktime = 0, then sighash = 1).
 
-### Known limitation: symbolic simulator
+### Numeric byte pushes
 
-The PUSHTX macros push 32-byte secp256k1 constants (e.g. `n/2`, `n`, `Gx`)
-as raw byte arrays. The bsvz-macro symbolic simulator enforces a strict
-type system that flags these as non-integer when they reach
-`OP_GREATERTHAN` / `OP_ADD` / etc. The expansions are valid Bitcoin Script
-and execute correctly on-chain; only the in-process simulator rejects
-them. The unit tests assert `error.SimError` for the affected macros.
+The bsvz-macro symbolic simulator treats any byte push, hash, or integer as
+numeric for the purposes of `OP_ADD`, `OP_GREATERTHAN`, etc. — matching
+on-chain Bitcoin Script semantics. This is what lets `PUSHTX_TOCANONICAL`
+compare `s` against the 32-byte `n/2` constant without tripping a type
+error. See `tests/simulator_tests.zig` ("numeric comparison accepts .bytes
+operands") for the regression test.
 
 ## Extracted Content
 

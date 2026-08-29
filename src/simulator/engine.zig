@@ -48,6 +48,13 @@ fn depthFromValue(value: i64, max_stack: u16) SimError!usize {
     return @intCast(value);
 }
 
+fn isNumeric(t: StackType) bool {
+    return switch (t) {
+        .integer, .bytes, .hash160, .hash256 => true,
+        else => false,
+    };
+}
+
 pub const SymbolicEngine = struct {
     main_stack: SymbolicStack,
     alt_stack: SymbolicStack,
@@ -297,7 +304,7 @@ pub const SymbolicEngine = struct {
             .OP_MIN, .OP_MAX => {
                 const item1 = try self.main_stack.pop();
                 const item2 = try self.main_stack.pop();
-                if (std.meta.activeTag(item1.type) != .integer or std.meta.activeTag(item2.type) != .integer) return SimError.TypeMismatch;
+                if (!isNumeric(item1.type) or !isNumeric(item2.type)) return SimError.TypeMismatch;
                 const is_bool = switch (op) {
                     .OP_BOOLAND, .OP_BOOLOR, .OP_NUMEQUAL, .OP_NUMNOTEQUAL,
                     .OP_LESSTHAN, .OP_GREATERTHAN, .OP_LESSTHANOREQUAL, .OP_GREATERTHANOREQUAL => true,
@@ -312,13 +319,13 @@ pub const SymbolicEngine = struct {
             .OP_NUMEQUALVERIFY => {
                 const item1 = try self.main_stack.pop();
                 const item2 = try self.main_stack.pop();
-                if (std.meta.activeTag(item1.type) != .integer or std.meta.activeTag(item2.type) != .integer) return SimError.TypeMismatch;
+                if (!isNumeric(item1.type) or !isNumeric(item2.type)) return SimError.TypeMismatch;
             },
             .OP_WITHIN => {
                 const max = try self.main_stack.pop();
                 const min = try self.main_stack.pop();
                 const x = try self.main_stack.pop();
-                if (std.meta.activeTag(max.type) != .integer or std.meta.activeTag(min.type) != .integer or std.meta.activeTag(x.type) != .integer) return SimError.TypeMismatch;
+                if (!isNumeric(max.type) or !isNumeric(min.type) or !isNumeric(x.type)) return SimError.TypeMismatch;
                 try self.main_stack.push(a, .{ .type = StackType.bool });
             },
 

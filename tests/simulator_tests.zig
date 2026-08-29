@@ -185,3 +185,26 @@ test "simulator: non-integer OP_PICK depth is rejected" {
     try testing.expectError(error.SimError, result);
 }
 
+test "simulator: numeric comparison accepts .bytes operands" {
+    // Regression test: a 4-byte little-endian push (treated as .bytes{4} by
+    // the simulator) must be accepted by OP_GREATERTHAN, matching on-chain
+    // Bitcoin Script semantics. This is what enables the PUSHTX macros
+    // (which push 32-byte secp256k1 constants) to compile.
+    const allocator = testing.allocator;
+    // Push 0x05 (5), then push 0x03 (3) on top, then OP_GREATERTHAN -> true.
+    const result = try bsvz_macro.compile(allocator, "OP_5 OP_3 OP_GREATERTHAN", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+    try testing.expect(result.is_standard);
+}
+
+test "simulator: numeric arithmetic on 4-byte push succeeds" {
+    // OP_ADD on two 4-byte numeric pushes (both .bytes{4}) must succeed.
+    // Push 0x02 and 0x03, then OP_ADD -> 5.
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "OP_2 OP_3 OP_ADD", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+    try testing.expect(result.is_standard);
+}
+

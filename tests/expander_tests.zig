@@ -181,39 +181,37 @@ test "expander: multiple macros in sequence compile" {
 }
 
 // PUSHTX (WP1605) building block tests
-//
-// Note: the symbolic simulator does not understand that byte-array pushes
-// (e.g. 32-byte secp256k1 constants) can participate in OP_GREATERTHAN /
-// OP_ADD / etc. The PUSHTX macros are correct Bitcoin Script; the simulator
-// type-checks fail because the pushed items have type `.bytes`, not `.integer`.
-// These tests therefore expect SimError for macros that mix byte pushes with
-// arithmetic, and only check bytecode structure for the inner expanders.
 
 test "expander: PUSHTX_TOCANONICAL expansion is correct" {
-    // Compile expects SimError because the symbolic simulator rejects the
-    // 32-byte n/2 push as non-integer in OP_GREATERTHAN.  We only verify
-    // that the expansion itself is non-empty by checking the lex/parse path
-    // produces something; the full compile will surface a SimError.
     const allocator = testing.allocator;
-    // We can only assert the bytecode structure if expansion succeeds in
-    // isolation.  For now, document the expected SimError.
-    const result = bsvz_macro.compile(allocator, "PUSHTX_TOCANONICAL", .{});
-    try testing.expectError(error.SimError, result);
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_TOCANONICAL", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
 }
 
 test "expander: PUSHTX_TOCANONICAL structure matches WP1605" {
     // The expansion is: OP_DUP <push n/2> OP_GREATERTHAN OP_IF <push n> OP_SWAP OP_SUB OP_ENDIF
-    // Verify by reading the prelude directly via the internal table.
-    // Since the public compile() path triggers SimError (see above), we
-    // assert the expected sequence by inspecting the internal expander.
+    // bsvz emits 32-byte pushes as the direct-push opcode 0x20 ("push next 32
+    // bytes"), which is equivalent to OP_PUSHBYTES_32 (0x4f) in Bitcoin Script.
     const allocator = testing.allocator;
-    const table = bsvz_macro.prelude;
-    // We need access to the macro table to call the expander directly.
-    // For now, we only assert that the lex/parse path works (a LexError
-    // would indicate the macro name is rejected).
-    _ = table;
-    const result = bsvz_macro.compile(allocator, "PUSHTX_TOCANONICAL", .{});
-    try testing.expectError(error.SimError, result);
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_TOCANONICAL", .{});
+    defer result.deinit(allocator);
+
+    var expected_buf: [1 + 1 + 32 + 1 + 1 + 1 + 32 + 1 + 1 + 1]u8 = undefined;
+    var i: usize = 0;
+    expected_buf[i] = 0x76; i += 1; // OP_DUP
+    expected_buf[i] = 0x20; i += 1; // direct push 32 bytes (n/2)
+    @memcpy(expected_buf[i .. i + 32], &SECP256K1_N_HALF);
+    i += 32;
+    expected_buf[i] = 0xa0; i += 1; // OP_GREATERTHAN
+    expected_buf[i] = 0x63; i += 1; // OP_IF
+    expected_buf[i] = 0x20; i += 1; // direct push 32 bytes (n)
+    @memcpy(expected_buf[i .. i + 32], &SECP256K1_N);
+    i += 32;
+    expected_buf[i] = 0x7c; i += 1; // OP_SWAP
+    expected_buf[i] = 0x94; i += 1; // OP_SUB
+    expected_buf[i] = 0x68; i += 1; // OP_ENDIF
+    try testing.expectEqualSlices(u8, expected_buf[0..i], result.bytecode);
 }
 
 test "expander: PUSHTX_CONCATENATIONS compiles" {
@@ -224,26 +222,28 @@ test "expander: PUSHTX_CONCATENATIONS compiles" {
 }
 
 test "expander: PUSHTX_TODER expansion is correct" {
-    // PUSHTX_TODER inlines PUSHTX_TOCANONICAL + PUSHTX_CONCATENATIONS; the
-    // simulator still trips on the canonical half (see above).
     const allocator = testing.allocator;
-    const result = bsvz_macro.compile(allocator, "PUSHTX_TODER", .{});
-    try testing.expectError(error.SimError, result);
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_TODER", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
 }
 
 test "expander: PUSHTX_SIGN[1] expansion is correct" {
-    // PUSHTX_SIGN also mixes secp256k1 byte pushes with arithmetic, so the
-    // simulator rejects it.  The expansion itself is correct Bitcoin Script.
     const allocator = testing.allocator;
-    const result = bsvz_macro.compile(allocator, "PUSHTX_SIGN[1]", .{});
-    try testing.expectError(error.SimError, result);
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_SIGN[1]", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+
+    const sig_marker = [_]u8{ 0x04, 0x01, 0x00, 0x00, 0x00 };
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &sig_marker) != null);
 }
 
 test "expander: PUSHTX_SIGN accepts SIGHASH_SINGLE|ANYONECANPAY = 0x83" {
-    // 0x83 = SIGHASH_SINGLE (0x03) | SIGHASH_ANYONECANPAY (0x80)
     const allocator = testing.allocator;
-    const result = bsvz_macro.compile(allocator, "PUSHTX_SIGN[131]", .{});
-    try testing.expectError(error.SimError, result);
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_SIGN[131]", .{});
+    defer result.deinit(allocator);
+    const sig_marker = [_]u8{ 0x04, 0x83, 0x00, 0x00, 0x00 };
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &sig_marker) != null);
 }
 
 test "expander: PUSHTX_OUTPUTS_REQUEST compiles" {
