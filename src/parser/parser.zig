@@ -1,9 +1,10 @@
 const std = @import("std");
 const TokenWithLoc = @import("../lexer/token.zig").TokenWithLoc;
 const Token = @import("../lexer/token.zig").Token;
-const AstNode = @import("ast.zig").AstNode;
-const Condition = @import("ast.zig").Condition;
-const FeatureFlag = @import("ast.zig").FeatureFlag;
+const ast_mod = @import("ast.zig");
+const AstNode = ast_mod.AstNode;
+const Condition = ast_mod.Condition;
+const FeatureFlag = ast_mod.FeatureFlag;
 const ParseError = @import("error.zig").ParseError;
 const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
 const SourceLocation = @import("../diagnostics.zig").SourceLocation;
@@ -56,6 +57,7 @@ pub const Parser = struct {
     pub fn parseWithLocations(self: *Parser, out_locs: *std.ArrayListUnmanaged(SourceLocation)) ParseError![]const AstNode {
         var statements: std.ArrayList(AstNode) = .empty;
         defer statements.deinit(self.allocator);
+        errdefer ast_mod.deinitNodes(statements.items, self.allocator);
 
         var first_error: ?ParseError = null;
 
@@ -161,6 +163,7 @@ pub const Parser = struct {
 
         var args: std.ArrayList(AstNode) = .empty;
         defer args.deinit(self.allocator);
+        errdefer ast_mod.deinitNodes(args.items, self.allocator);
 
         // Optional argument list: [arg1, arg2, ...]
         if (self.match(.l_bracket)) {
@@ -176,6 +179,12 @@ pub const Parser = struct {
         var body: ?[]const AstNode = null;
         if (self.match(.l_brace)) {
             body = try self.parseBody();
+            errdefer {
+                if (body) |b| {
+                    ast_mod.deinitNodes(b, self.allocator);
+                    self.allocator.free(b);
+                }
+            }
             if (!self.match(.r_brace)) return ParseError.UnexpectedToken;
         }
 
@@ -200,6 +209,10 @@ pub const Parser = struct {
 
         if (!self.match(.l_brace)) return ParseError.UnexpectedToken;
         const body = try self.parseBody();
+        errdefer {
+            ast_mod.deinitNodes(body, self.allocator);
+            self.allocator.free(body);
+        }
         if (!self.match(.r_brace)) return ParseError.UnexpectedToken;
 
         return .{

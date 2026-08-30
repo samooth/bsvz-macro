@@ -46,7 +46,7 @@ pub const ScriptAst = struct {
     }
 };
 
-fn deinitNodes(nodes: []const AstNode, allocator: std.mem.Allocator) void {
+pub fn deinitNodes(nodes: []const AstNode, allocator: std.mem.Allocator) void {
     for (nodes) |node| {
         switch (node) {
             .macro_invocation => |m| {
@@ -80,4 +80,8 @@ fn deinitNodes(nodes: []const AstNode, allocator: std.mem.Allocator) void {
             else => {},
         }
     }
+}
+
+pub fn deinit(allocator: std.mem.Allocator, node: AstNode) void {
+    deinitNodes(&[_]AstNode{node}, allocator);
 }

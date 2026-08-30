@@ -21,6 +21,15 @@ pub const Scanner = struct {
     pub fn scanAll(self: *Scanner, allocator: std.mem.Allocator) LexError![]TokenWithLoc {
         var tokens: std.ArrayList(TokenWithLoc) = .empty;
         defer tokens.deinit(allocator);
+        errdefer {
+            for (tokens.items) |t| {
+                switch (t.token) {
+                    .macro_name, .iterator_var => |v| allocator.free(v),
+                    .string => {},
+                    else => {},
+                }
+            }
+        }
 
         while (true) {
             const tok = self.nextToken(allocator) catch |e| {

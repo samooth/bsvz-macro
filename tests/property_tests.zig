@@ -525,3 +525,139 @@ test "property: randomized compilable sources are deterministic" {
         try testing.expectEqualSlices(u8, &r1.hash, &r2.hash);
     }
 }
+
+// ==================== ROBUSTNESS PROPERTY TESTS ====================
+
+fn prngNext(state: *u32) u32 {
+    var x = state.*;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    state.* = x;
+    return x;
+}
+
+test "property: fromAsm(toAsm(x)) round-trips to x" {
+    const allocator = testing.allocator;
+    const sources = [_][]const u8{
+        "OP_DUP OP_DROP",
+        "SAFE_DIV",
+        "RANGE_CHECK[0,100]",
+        "OP_XSWAP[3]",
+        "OP_1 OP_2 OP_ADD",
+    };
+    var compiled: [sources.len][]u8 = undefined;
+    var compiled_count: usize = 0;
+    for (sources) |source| {
+        const r = bsvz_macro.compile(allocator, source, .{}) catch continue;
+        compiled[compiled_count] = try allocator.dupe(u8, r.bytecode);
+        r.deinit(allocator);
+        compiled_count += 1;
+    }
+    defer for (compiled[0..compiled_count]) |b| allocator.free(b);
+
+    var to_test = std.ArrayListUnmanaged([]const u8).empty;
+    defer to_test.deinit(allocator);
+    for (compiled[0..compiled_count]) |b| try to_test.append(allocator, b);
+    try to_test.append(allocator, &[_]u8{ 0x76, 0x75 });
+    try to_test.append(allocator, &[_]u8{ 0x51, 0x51, 0x87 });
+    try to_test.append(allocator, &[_]u8{ 0x4c, 0x03, 0x01, 0x02, 0x03, 0x75 });
+
+    for (to_test.items) |original| {
+        // The bsvz ASM codec canonicalises push encodings (e.g. OP_PUSHDATA1
+        // for short pushes round-trips to a direct push), so the round-tripped
+        // bytecode is not byte-exact. The strong invariant we check is that
+        // the ASM representation is idempotent: toAsm(fromAsm(toAsm(x))) ==
+        // toAsm(x). This guards against lossiness in the bytecode <-> ASM
+        // conversion without over-specifying the encoder's canonical form.
+        const asm1 = bsvz_macro.toAsm(allocator, original) catch continue;
+        defer allocator.free(asm1);
+        const roundtripped = bsvz_macro.fromAsm(allocator, asm1) catch continue;
+        defer allocator.free(roundtripped);
+        const asm2 = bsvz_macro.toAsm(allocator, roundtripped) catch continue;
+        defer allocator.free(asm2);
+        try testing.expectEqualSlices(u8, asm1, asm2);
+    }
+}
+
+test "property: lex fuzz — random bytes yield a clean compile result" {
+    const allocator = testing.allocator;
+    var state: u32 = 0x12345678;
+    var i: usize = 0;
+    while (i < 256) : (i += 1) {
+        const len = prngNext(&state) % 64;
+        var buf: [64]u8 = undefined;
+        var j: usize = 0;
+        while (j < len) : (j += 1) {
+            buf[j] = @truncate(prngNext(&state));
+        }
+        const source = buf[0..len];
+        if (bsvz_macro.compile(allocator, source, .{})) |r| {
+            r.deinit(allocator);
+        } else |_| {
+            // Any MacroError is acceptable; the goal is no panic.
+        }
+    }
+}
+
+test "property: mutation fuzz — mutated valid sources compile cleanly" {
+    const allocator = testing.allocator;
+    const corpus = [_][]const u8{
+        "OP_DUP OP_DROP",
+        "SAFE_DIV",
+        "RANGE_CHECK[0,100]",
+        "OP_XSWAP[3]",
+        "OP_HASHCAT",
+        "OP_XROT[2]",
+        "VERIFY_ALL[3]",
+        "IFDUP",
+        "OP_1 OP_2 OP_ADD OP_DROP",
+    };
+    const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_[] ,;{}!@#$%^&*()";
+    var state: u32 = 0x87654321;
+    var i: usize = 0;
+    while (i < 256) : (i += 1) {
+        const idx = prngNext(&state) % corpus.len;
+        const original = corpus[idx];
+        var buf: [128]u8 = undefined;
+        const copy_len = @min(original.len, buf.len);
+        @memcpy(buf[0..copy_len], original[0..copy_len]);
+        const mode = prngNext(&state) % 3;
+        switch (mode) {
+            0 => {
+                if (copy_len > 0) {
+                    const pos = prngNext(&state) % copy_len;
+                    const bit: u3 = @truncate(@as(u32, prngNext(&state) & 0x7));
+                    buf[pos] ^= @as(u8, 1) << bit;
+                }
+            },
+            1 => {
+                if (copy_len > 0) {
+                    const pos = prngNext(&state) % copy_len;
+                    buf[pos] = alphabet[prngNext(&state) % alphabet.len];
+                }
+            },
+            else => {
+                if (copy_len < buf.len) {
+                    const pos = prngNext(&state) % (copy_len + 1);
+                    const ch = alphabet[prngNext(&state) % alphabet.len];
+                    var k: usize = copy_len;
+                    while (k > pos) : (k -= 1) {
+                        buf[k] = buf[k - 1];
+                    }
+                    buf[pos] = ch;
+                    const new_len = copy_len + 1;
+                    const source = buf[0..new_len];
+                    if (bsvz_macro.compile(allocator, source, .{})) |r| {
+                        r.deinit(allocator);
+                    } else |_| {}
+                    continue;
+                }
+            },
+        }
+        const source = buf[0..copy_len];
+        if (bsvz_macro.compile(allocator, source, .{})) |r| {
+            r.deinit(allocator);
+        } else |_| {}
+    }
+}

@@ -12,7 +12,8 @@ pub const encoder = @import("encoder/hex.zig");
 pub const MacroTable = @import("expander/table.zig").MacroTable;
 pub const MacroDefinition = @import("expander/table.zig").MacroDefinition;
 pub const ParamType = @import("expander/table.zig").ParamType;
-pub const AstNode = @import("parser/ast.zig").AstNode;
+const ast_mod = @import("parser/ast.zig");
+pub const AstNode = ast_mod.AstNode;
 pub const ExpandError = @import("expander/error.zig").ExpandError;
 
 pub const bridge = struct {
@@ -325,38 +326,8 @@ pub fn fromAsm(allocator: std.mem.Allocator, asm_source: []const u8) MacroError!
     };
 }
 
-fn deinitAstNode(allocator: std.mem.Allocator, node: @import("parser/ast.zig").AstNode) void {
-    switch (node) {
-        .macro_invocation => |m| {
-            allocator.free(m.name);
-            for (m.args) |arg| deinitAstNode(allocator, arg);
-            allocator.free(m.args);
-            if (m.body) |body| {
-                for (body) |n| deinitAstNode(allocator, n);
-                allocator.free(body);
-            }
-        },
-        .loop_block => |l| {
-            allocator.free(l.iterator_var);
-            for (l.body) |n| deinitAstNode(allocator, n);
-            allocator.free(l.body);
-        },
-        .conditional => |c| {
-            for (c.then_branch) |n| deinitAstNode(allocator, n);
-            allocator.free(c.then_branch);
-            if (c.else_branch) |eb| {
-                for (eb) |n| deinitAstNode(allocator, n);
-                allocator.free(eb);
-            }
-        },
-        .block => |b| {
-            for (b) |n| deinitAstNode(allocator, n);
-            allocator.free(b);
-        },
-        .string_literal => |s| allocator.free(s),
-        .iterator_ref => |s| allocator.free(s),
-        else => {},
-    }
+fn deinitAstNode(allocator: std.mem.Allocator, node: AstNode) void {
+    ast_mod.deinit(allocator, node);
 }
 
 test {
