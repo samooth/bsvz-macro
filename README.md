@@ -32,7 +32,11 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 
 - **11 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, `PUSHTX_FRAGMENT`
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
-- **Conditional compilation**: `@bsv`, `@chronicle`, `@btc_strict`, `@version(n)`
+- **Conditional compilation, 4 orthogonal layers**: eras (`@era(chronicle)`),
+  features (`@has(cat)`, `@has(mul)`, `@has(otda)`, ...), limits
+  (`@limit(push, 32MB)`), networks (`@network(bsv_mainnet)`), plus
+  `@standardness(flag)` predicates, `@compileError("msg")`, and legacy
+  `@bsv` / `@chronicle` / `@btc_strict` / `@version[n]`
 - **Symbolic stack simulator**: Validates stack transitions before emission
 - **Bounds & policy validation**: Enforces consensus and standardness rules
 - **Dual mode**: `compile()` (runtime) and `compileComptime()` (zero-cost at build time)
@@ -189,8 +193,10 @@ Source DSL
 | `PUSHTX_SIGN[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx ADD n MOD PUSHTX_TODER <sighash> CAT Gcomp CAT` |
 | `PUSHTX_SIGN_FAST[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx DUP TOALTSTACK ADD n MOD PUSHTX_TODER_FAST <sighash> CAT Gcomp CAT` (byte-identical to `PUSHTX_SIGN`) |
 | `PUSHTX_OUTPUTS_REQUEST[item8, items10_11]` | 2 | `[..., H, F]` → `[..., F, H, HASH256(H), ...]` | `2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10_11> CAT` |
+| `PUSHTX_OUTPUTS_REQUEST_FAST[item8, items10_11]` | 2 | (byte-identical output) | `2DUP CAT TOALTSTACK SWAP CAT HASH256 <item8> SWAP CAT FROMALTSTACK SWAP CAT CAT <items10_11> CAT` (WP1605 §1.4 alt-stack optimisation) |
 | `PUSHTX_SIGN_BIT_SHIFT[security, sighash]` | 2 | `[..., z]` → `[..., z, <sig>]` | `push security OP_RSHIFT push <prefix‖R‖0x0220> SWAP CAT push sighash CAT push P CHECKSIG` |
 | `PELS_LOCKING_SCRIPT[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script) | `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
+| `PELS_LOCKING_SCRIPT_FAST[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script, alt-stack) | `[outputsRequest_FAST] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
 | `PELS_LOCKING_SCRIPT_BIT_SHIFT[security, sighash, item8, items10_11, pk_b_hash160]` | 5 | (full PELS script, bit-shift) | `[outputsRequest] [sign_bit_shift] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
 
 ## DSL Grammar
@@ -200,14 +206,31 @@ script      ::= statement (";" statement)* ";"?
 statement   ::= opcode
               | macro "[" args "]" ["{" body "}"]
               | "LOOP" "[" integer "]" "{" body "}"
-              | "@" flag ["(" integer ")"] "{" body "}" ["else" "{" body "}"]
+              | "@" flag ["(" args ")"] "{" body "}" ["else" "{" body "}"]
+              | "@compileError" "(" string ")"
 
 opcode      ::= "OP_" IDENT
 args        ::= arg ("," arg)*
-arg         ::= integer | string | opcode
+arg         ::= integer | string | opcode | "<i>"
 body        ::= statement (";" statement)* ";"?
-flag        ::= "bsv" | "chronicle" | "btc_strict" | "version"
+flag        ::= "era" "(" era ")"
+              | "has" "(" feature ")"
+              | "limit" "(" kind "," magnitude ")"
+              | "network" "(" network ")"
+              | "standardness" "(" std_flag ")"
+              | "version" "[" integer "]"
+              | "bsv" | "chronicle" | "btc_strict"
+era         ::= "satoshi" | "bip" | "bch" | "bsv_pre_genesis" | "genesis" | "chronicle"
+kind        ::= "push" | "script" | "opcodes" | "stack"
+network     ::= "btc_mainnet" | "btc_testnet" | "bch_mainnet" | "bch_testnet"
+              | "bsv_mainnet" | "bsv_testnet" | "bsv_regtest"
+std_flag    ::= "dersig" | "low_s" | "forkid" | "cleanstack" | "nulldummy"
+              | "sigpushonly" | "minimaldata" | "minimalif"
 ```
+
+All flags are pure predicates over `CompileOptions` (era auto-derived from
+`block_height` when provided, feature set derived from the era). A dead
+branch is discarded wholesale; `@compileError` inside it never fires.
 
 ## Safety Limits
 
@@ -241,6 +264,33 @@ pub fn toAsm(allocator, bytecode) ![]const u8;
 /// ASM → Bytecode
 pub fn fromAsm(allocator, asm_source) MacroError![]const u8;
 ```
+
+## CompileOptions
+
+```zig
+pub const CompileOptions = struct {
+    target: Target = .bsv_mainnet,          // legacy; maps to network
+    network: ?Network = null,               // overrides target when set
+    era: ?Era = null,                       // overrides block_height detection
+    block_height: ?u32 = null,               // auto-derives era
+    protocol_version: u32 = 1,              // @version[N] compares against this
+    tx_version: u32 = 1,                    // Chronicle features (nVersion > 1)
+    features: FeatureSet = .{},             // OR-ed with era-derived features
+    standardness: StandardnessFlags = .{},  // read by @standardness(...)
+    limits: LimitSet = .{},                  // read by @limit(kind, n)
+    enforce_standardness: bool = true,
+    max_script_size: u32 = 10_000,          // legacy; overrides limits.script
+    max_stack_elements: u16 = 1_000,        // legacy; overrides limits.stack
+    max_push_size: u16 = 520,               // legacy; overrides limits.push
+    emit_asm: bool = false,
+};
+```
+
+Effective values resolve as `network ?? Network.fromTarget(target)`,
+`era ?? eraFromBlockHeight(block_height) ?? defaultEraForNetwork(network)`,
+and `features ∪ featuresForEra(era)`. The whole struct is hashed verbatim
+into the result hash — changing any option changes the hash even when the
+bytecode is identical.
 
 ## Testing
 

@@ -239,13 +239,26 @@ script      ::= statement (";" statement)* ";"?
 statement   ::= opcode
               | macro "[" args "]" ["{" body "}"]
               | "LOOP" "[" integer "]" "{" body "}"
-              | "@" flag ["(" integer ")"] "{" body "}" ["else" "{" body "}"]
+              | "@" flag ["(" args ")"] "{" body "}" ["else" "{" body "}"]
+              | "@compileError" "(" string ")"
 
 opcode      ::= "OP_" IDENT
 args        ::= arg ("," arg)*
-arg         ::= integer | string | opcode
+arg         ::= integer | string | opcode | "<i>"
 body        ::= statement (";" statement)* ";"?
-flag        ::= "bsv" | "chronicle" | "btc_strict" | "version"
+flag        ::= "era" "(" era ")"
+              | "has" "(" feature ")"
+              | "limit" "(" kind "," magnitude ")"
+              | "network" "(" network ")"
+              | "standardness" "(" std_flag ")"
+              | "version" "[" integer "]"
+              | "bsv" | "chronicle" | "btc_strict"
+era         ::= "satoshi" | "bip" | "bch" | "bsv_pre_genesis" | "genesis" | "chronicle"
+kind        ::= "push" | "script" | "opcodes" | "stack"
+network     ::= "btc_mainnet" | "btc_testnet" | "bch_mainnet" | "bch_testnet"
+              | "bsv_mainnet" | "bsv_testnet" | "bsv_regtest"
+std_flag    ::= "dersig" | "low_s" | "forkid" | "cleanstack" | "nulldummy"
+              | "sigpushonly" | "minimaldata" | "minimalif"
 ```
 
 ### Bucles con iterador
@@ -256,15 +269,22 @@ LOOP[5]{ OP_<i> OP_ADD }
 
 `<i>` se sustituye por 0, 1, 2, 3, 4 en cada iteracion.
 
-### Flags condicionales
+### Compilacion condicional: 4 capas ortogonales
 
 ```
-@bsv{ OP_CAT } else { OP_NOP }
+@era(chronicle){ OP_NOP7 } else { OP_NOP }          // era del protocolo
+@has(cat){ OP_CAT } else { OP_NOP }                 // feature de la era
+@limit(push, 32MB){ OP_DUP } else { OP_DROP }        // limite efectivo
+@network(bsv_mainnet){ OP_DUP } else { OP_DROP }    // red
+@standardness(cleanstack){ OP_DUP } else { OP_DROP } // predicado de policy
+@compileError("requiere Chronicle")                   // error al expandir
 ```
 
-```
-@version(2){ OP_LSHIFTNUM }
-```
+La era se auto-detecta desde `block_height` si esta seteada, si no usa el
+default de la red. `@era(X)` activa implicitamente todos los `@has(...)`
+de esa era. Flags legacy: `@bsv`, `@btc_strict`, `@version[N]` (contra
+`protocol_version`), y `@chronicle` — que ahora exige la era chronicle
+(ya no es un alias de `@bsv`).
 
 ## Opciones de compilacion
 
@@ -273,9 +293,16 @@ const options = bsvz_macro.CompileOptions{
     .target = .bsv_mainnet,           // .bsv_mainnet, .bsv_testnet, .btc_strict
     .enforce_standardness = true,     // Aplicar reglas de policy
     .max_script_size = 10_000,       // Limite de tamano (consenso: 1GB, policy: 10MB)
-    .max_stack_elements = 1_000,     // Max elementos en stack
-    .max_push_size = 520,            // Max push (policy; Chronicle: 32MB)
+    .max_stack_elements = 1_000,     // Max elementos en stack (legacy → limits.stack)
+    .max_push_size = 520,            // Max push (policy; Chronicle: 32MB) (legacy → limits.push)
     .emit_asm = false,               // Generar salida ASM
+    .network = .bsv_mainnet,          // NUEVO: red (overrides target)
+    .era = .chronicle,                // NUEVO: override manual de era
+    .block_height = 943_816,          // NUEVO: auto-detecta era
+    .protocol_version = 1,           // NUEVO: para @version[N]
+    .features = .{},                 // NUEVO: OR-ed con features de la era
+    .standardness = .{},             // NUEVO: leido por @standardness(...)
+    .limits = .{},                    // NUEVO: leido por @limit(kind, n)
 };
 ```
 

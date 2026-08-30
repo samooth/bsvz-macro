@@ -11,6 +11,8 @@ pub const Token = union(enum) {
     r_bracket,    // ]
     l_brace,      // {
     r_brace,      // }
+    l_paren,      // (
+    r_paren,      // )
     semicolon,    // ;
     comma,        // ,
     at,           // @

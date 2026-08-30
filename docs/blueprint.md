@@ -302,8 +302,13 @@ pub const AstNode = union(enum) {
 };
 
 pub const Condition = union(enum) {
-    feature_flag: FeatureFlag,    // @bsv, @chronicle, @cat_enabled
-    version_check: u32,           // @version(2)
+    era: Era,                    // @era(chronicle)
+    has_feature: []const u8,     // @has(cat) — resuelto contra FeatureSet
+    limit: struct { kind: LimitKind, threshold: u32 }, // @limit(push, 32MB)
+    network: Network,            // @network(bsv_mainnet)
+    standardness: []const u8,    // @standardness(cleanstack)
+    version_check: u32,          // @version[2] — contra protocol_version
+    legacy_flag: LegacyFlag,     // @bsv, @chronicle, @btc_strict
 };
 ```
 
@@ -480,10 +485,15 @@ pub const StackTransition = struct {
 | Alt stack | 1,000 | 1,000 | Rechazar si excede |
 | OP_RETURN size | Ilimitado | 100 KB | Warning si > 100KB |
 
-**Feature flags (para target multi-chain):**
-- `@bsv`: habilita OP_CAT, OP_SPLIT, OP_NUM2BIN, etc.
-- `@chronicle`: habilita OP_SUBSTR, OP_LSHIFTNUM, 32MB numbers
-- `@btc_strict`: deshabilita OP_CAT, OP_MUL, etc.; emite error si se usan
+**Feature flags (4 capas ortogonales, ver `src/options.zig`):**
+- `@era(e)`: era del protocolo (satoshi → chronicle); activa los `@has` de esa era
+- `@has(f)`: feature individual (cat, mul, lshiftnum, otda, p2sh, forkid, ...) —
+  derivado de la era, OR-ed con `options.features`
+- `@limit(kind, n)`: limite efectivo (push, script, opcodes, stack)
+- `@network(net)`: red (btc/bch/bsv × mainnet/testnet/regtest)
+- `@standardness(f)`: predicado sobre `CompileOptions.standardness`
+- `@compileError("msg")`: falla la expansion con mensaje
+- Legacy: `@bsv`, `@chronicle` (exige era chronicle), `@btc_strict`, `@version[n]`
 
 ### 4.6 Fase 6: Encoding (encoder/*.zig)
 

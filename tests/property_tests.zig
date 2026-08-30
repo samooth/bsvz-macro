@@ -332,9 +332,11 @@ test "property: sequential composition is additive in bytecode" {
 
 test "property: bsv/chronicle conditionals are bytecode-preserving on bsv" {
     const allocator = testing.allocator;
-    // On BSV targets, wrapping a script in @bsv{ ... } or @chronicle{ ... }
-    // must not change its emitted bytecode. This validates feature-flag
-    // expansion when macros and loops are nested inside the conditional.
+    // Wrapping a script in @bsv{ ... } on BSV targets, or @chronicle{ ... }
+    // on Chronicle-era targets, must not change its emitted bytecode. This
+    // validates feature-flag expansion when macros and loops are nested
+    // inside the conditional. @chronicle requires the chronicle era (it is
+    // no longer an alias of @bsv).
     const sources = [_][]const u8{
         "OP_DUP OP_HASH160 OP_EQUAL",
         "OP_XSWAP[5] OP_XDROP[2]",
@@ -359,7 +361,7 @@ test "property: bsv/chronicle conditionals are bytecode-preserving on bsv" {
 
         const bsv_res = try bsvz_macro.compile(allocator, bsv_wrapped.items, .{});
         defer bsv_res.deinit(allocator);
-        const chron_res = try bsvz_macro.compile(allocator, chron_wrapped.items, .{});
+        const chron_res = try bsvz_macro.compile(allocator, chron_wrapped.items, .{ .era = .chronicle });
         defer chron_res.deinit(allocator);
 
         try testing.expectEqualSlices(u8, plain.bytecode, bsv_res.bytecode);
@@ -425,21 +427,27 @@ test "property: LOOP unrolling of a macro equals n copies of the macro" {
 
 test "property: conditional branch selection is target-exhaustive" {
     const allocator = testing.allocator;
-    // On BSV, @bsv and @chronicle expand while @btc_strict is skipped; on
-    // btc_strict the opposite holds. Verify the combined bytecode equals the
-    // union of the enabled branches for each target.
+    // On BSV, @bsv expands while @btc_strict is skipped; on btc_strict the
+    // opposite holds. @chronicle only expands in the chronicle era. Verify
+    // the combined bytecode equals the union of the enabled branches for
+    // each target.
     const bsv = try bsvz_macro.compile(allocator, "@bsv{ OP_DUP } @chronicle{ OP_DROP } @btc_strict{ OP_NOP }", .{ .target = .bsv_mainnet });
     defer bsv.deinit(allocator);
     const btc = try bsvz_macro.compile(allocator, "@bsv{ OP_DUP } @chronicle{ OP_DROP } @btc_strict{ OP_NOP }", .{ .target = .btc_strict });
     defer btc.deinit(allocator);
+    const chron = try bsvz_macro.compile(allocator, "@bsv{ OP_DUP } @chronicle{ OP_DROP } @btc_strict{ OP_NOP }", .{ .era = .chronicle });
+    defer chron.deinit(allocator);
 
-    const bsv_expected = try bsvz_macro.compile(allocator, "OP_DUP OP_DROP", .{});
+    const bsv_expected = try bsvz_macro.compile(allocator, "OP_DUP", .{});
     defer bsv_expected.deinit(allocator);
     const btc_expected = try bsvz_macro.compile(allocator, "OP_NOP", .{});
     defer btc_expected.deinit(allocator);
+    const chron_expected = try bsvz_macro.compile(allocator, "OP_DUP OP_DROP", .{});
+    defer chron_expected.deinit(allocator);
 
     try testing.expectEqualSlices(u8, bsv_expected.bytecode, bsv.bytecode);
     try testing.expectEqualSlices(u8, btc_expected.bytecode, btc.bytecode);
+    try testing.expectEqualSlices(u8, chron_expected.bytecode, chron.bytecode);
 }
 
 test "property: iterator ref in macro arg expands per iteration" {

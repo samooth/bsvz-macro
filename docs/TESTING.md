@@ -13,12 +13,15 @@ zig build test
 
 This compiles and runs every test module in `tests/` plus the in-source test
 block in `src/lib.zig`. Each module is a separate test root so failures are
-isolated per file. As of this writing the suite contains **204 passing tests**
+isolated per file. As of this writing the suite contains **320 passing tests**
 across:
 
 - `tests/lexer_tests.zig`, `tests/parser_tests.zig`, `tests/expander_tests.zig`,
   `tests/simulator_tests.zig`, `tests/validator_tests.zig` — unit + negative +
   edge-case coverage per module.
+- `tests/flags_tests.zig` — conditional-compilation flag system (eras,
+  `@has`, `@limit`, `@network`, `@standardness`, `@compileError`,
+  legacy compatibility, era→feature derivation table).
 - `tests/negative_tests.zig` — error-condition coverage (lexer/parser/expander/
   simulator/validator).
 - `tests/property_tests.zig` — **property-based invariants** (determinism,

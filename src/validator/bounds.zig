@@ -17,16 +17,17 @@ pub const BoundsValidator = struct {
 
     pub fn validateWithDiagnostics(self: *const BoundsValidator, bytecode: []const u8, max_stack: u16, diagnostics: ?*DiagnosticList) ValError!bool {
         var is_standard = true;
+        const limits = self.options.effectiveLimits();
 
-        if (bytecode.len > self.options.max_script_size) {
+        if (bytecode.len > limits.script) {
             if (diagnostics) |diags| {
-                diags.append(.validate, .@"error", "script too large: {d} bytes exceeds limit {d}", unknownLocation, .{ bytecode.len, self.options.max_script_size });
+                diags.append(.validate, .@"error", "script too large: {d} bytes exceeds limit {d}", unknownLocation, .{ bytecode.len, limits.script });
             }
             return ValError.ScriptTooLarge;
         }
-        if (max_stack > self.options.max_stack_elements) {
+        if (max_stack > limits.stack) {
             if (diagnostics) |diags| {
-                diags.append(.validate, .@"error", "stack too deep: {d} elements exceeds limit {d}", unknownLocation, .{ max_stack, self.options.max_stack_elements });
+                diags.append(.validate, .@"error", "stack too deep: {d} elements exceeds limit {d}", unknownLocation, .{ max_stack, limits.stack });
             }
             return ValError.StackTooDeep;
         }
@@ -67,9 +68,9 @@ pub const BoundsValidator = struct {
                 }
                 is_standard = false;
             }
-            if (max_push > self.options.max_push_size) {
+            if (max_push > limits.push) {
                 if (diagnostics) |diags| {
-                    diags.append(.validate, .@"error", "non-standard: push of {d} bytes exceeds limit {d}", unknownLocation, .{ max_push, self.options.max_push_size });
+                    diags.append(.validate, .@"error", "non-standard: push of {d} bytes exceeds limit {d}", unknownLocation, .{ max_push, limits.push });
                 }
                 is_standard = false;
             }

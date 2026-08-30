@@ -122,10 +122,20 @@ PUSHTX [outputsRequest] block per WP1605 §1.3. Constructs the message fragment 
 - Stack: [..., item1..7, serialised_outputs] -> [..., item1..7, serialised_outputs, item9, item8, items10||11]
 - Expansion: 2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10||11> CAT
 
+### PUSHTX_OUTPUTS_REQUEST_FAST[item8_hex, items10_11_hex]
+Alt-stack variant of `PUSHTX_OUTPUTS_REQUEST` (WP1605 §1.4 optimisation). Byte-identical output, but caches the intermediate `Data2` on the alt stack to avoid re-deriving it.
+- Arity: 2 (string, string)
+- Expansion: 2DUP CAT TOALTSTACK SWAP CAT HASH256 <item8> SWAP CAT FROMALTSTACK SWAP CAT CAT <items10||11> CAT
+
 ### PELS_LOCKING_SCRIPT[sighash_flag, item8_hex, items10_11_hex, pk_b_hash160_hex]
-Full Perpetually Enforcing Locking Script from WP1605 §1.3 (Figure 1). Composes `PUSHTX_OUTPUTS_REQUEST` + `PUSHTX_SIGN` + the fixed OP_SWAP / OP_SPLIT / OP_EQUALVERIFY / OP_HASH160 / OP_CHECKSIG tail. The `pk_b_hash160_hex` argument must decode to exactly 20 bytes. Note: the PELS script assumes the spenders pubkey is already on the stack (from the unlocking script); the symbolic simulator does not model a pre-existing pubkey and will return `error.SimError`.
+Full Perpetually Enforcing Locking Script from WP1605 §1.3 (Figure 1). Composes `PUSHTX_OUTPUTS_REQUEST` + `PUSHTX_SIGN` + the fixed OP_SWAP / OP_SPLIT / OP_EQUALVERIFY / OP_HASH160 / OP_CHECKSIG tail. The `pk_b_hash160_hex` argument must decode to exactly 20 bytes. Note: the PELS script assumes the spenders pubkey is already on the stack (from the unlocking script); the symbolic simulator does not model a pre-existing pubkey and will return `error.SimError` under plain `compile()`. Use `compileWithUnlockingScript()` with a dummy pubkey item to simulate PELS end-to-end.
 - Arity: 4 (integer, string, string, string)
 - Expansion: `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
+
+### PELS_LOCKING_SCRIPT_FAST[sighash_flag, item8_hex, items10_11_hex, pk_b_hash160_hex]
+Alt-stack variant of `PELS_LOCKING_SCRIPT` (WP1605 §1.4). Composes `PUSHTX_OUTPUTS_REQUEST_FAST` + `PUSHTX_SIGN` + the same PELS tail. Because the alt-stack `outputsRequest` changes stack consumption, simulating this variant via `compileWithUnlockingScript()` requires a deeper unlocking-script stack (8 items) than the non-FAST PELS (5 items).
+- Arity: 4 (integer, string, string, string)
+- Expansion: `[outputsRequest_FAST] [sign] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
 
 ### PUSHTX_SIGN_BIT_SHIFT[security, sighash_flag]
 PUSHTX [sign] block per zkscript_package (WP1605 §1.4 / sCrypt optimisation). Uses `k = 2^security` instead of `k = 1`, avoiding the expensive `(z + Gx) mod n` computation. The signature is built inline using a precomputed `R = 2^security * G` and a "public key" `P = a * G` such that `a * R_x ≡ -1 mod n`. The unlocking key must grind `tx_in.sequence` until `HASH256(z) % 2^security == 1` and `HASH256(z) >> security >= 2^248`.
@@ -144,15 +154,41 @@ PELS locking script using the bit-shift `PUSHTX_SIGN_BIT_SHIFT` instead of `PUSH
 ```
 script      ::= statement (";" statement)* ";"?
 statement   ::= opcode | macro "[" args "]" "{" body "}"
-              | "@" flag "{" body "}" ["else" "{" body "}"]
+              | "@" flag ["(" args ")"] "{" body "}" ["else" "{" body "}"]
+              | "@compileError" "(" string ")"
 ```
 
-## Feature Flags
+## Conditional Flags
 
-- @bsv -- BSV mainnet/testnet features (enables OP_CAT, OP_MUL, etc.)
-- @chronicle -- Chronicle upgrade features (32MB numbers, restored opcodes)
-- @btc_strict -- Bitcoin Core compatibility mode (disables re-enabled opcodes)
-- @version(N) -- Minimum protocol version check
+Four orthogonal layers, all evaluated against `CompileOptions`:
+
+- **Era**: `@era(satoshi|bip|bch|bsv_pre_genesis|genesis|chronicle)` —
+  protocol era, auto-derived from `block_height` when set, else from the
+  network's default. `@era(X)` implicitly enables every `@has(...)` feature
+  of that era.
+- **Features**: `@has(cat)`, `@has(mul)`, `@has(lshiftnum)`, `@has(otda)`,
+  `@has(p2sh)`, `@has(cltv)`, `@has(forkid)`, `@has(bigscript)`, ... — the
+  era-derived feature set (see `src/options.zig` for the full table). Unknown
+  names warn and evaluate false.
+- **Limits**: `@limit(push, 32MB)`, `@limit(script, 10MB)`,
+  `@limit(opcodes, 1M)`, `@limit(stack, 1000)` — true when the effective
+  limit is at least the requested magnitude. Suffixes `K`/`M`/`G`
+  (decimal) are optional.
+- **Network**: `@network(bsv_mainnet)`, `@network(btc_mainnet)`, ... — any
+  of the seven supported networks.
+- **Standardness**: `@standardness(cleanstack)`, `@standardness(dersig)`,
+  `@standardness(low_s)`, `@standardness(nulldummy)`,
+  `@standardness(sigpushonly)`, `@standardness(minimaldata)`,
+  `@standardness(minimalif)`, `@standardness(forkid)` — predicates over
+  `CompileOptions.standardness` (no structural validation).
+- `@compileError("message")` — statement that always fails expansion with
+  `ExpandError.CompileError` when its branch is selected; inert in dead
+  branches.
+
+Legacy flags, still supported: `@bsv`, `@chronicle`, `@btc_strict`,
+`@version[N]`. Note that `@chronicle` now requires the chronicle era (it is
+no longer an alias of `@bsv`), and `@version[N]` compares against
+`options.protocol_version` instead of a hard-coded threshold.
 
 ## Loop Syntax
 

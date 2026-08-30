@@ -21,20 +21,18 @@ pub const bridge = struct {
     pub const wallet = @import("bridge/wallet.zig");
 };
 
-pub const Target = enum {
-    bsv_mainnet,
-    bsv_testnet,
-    btc_strict,
-};
-
-pub const CompileOptions = struct {
-    target: Target = .bsv_mainnet,
-    enforce_standardness: bool = true,
-    max_script_size: u32 = 10_000,
-    max_stack_elements: u16 = 1_000,
-    max_push_size: u16 = 520,
-    emit_asm: bool = false,
-};
+pub const options_mod = @import("options.zig");
+pub const Target = options_mod.Target;
+pub const Era = options_mod.Era;
+pub const Network = options_mod.Network;
+pub const FeatureSet = options_mod.FeatureSet;
+pub const StandardnessFlags = options_mod.StandardnessFlags;
+pub const LimitSet = options_mod.LimitSet;
+pub const LimitKind = options_mod.LimitKind;
+pub const CompileOptions = options_mod.CompileOptions;
+pub const eraFromBlockHeight = options_mod.eraFromBlockHeight;
+pub const featuresForEra = options_mod.featuresForEra;
+pub const chronicle_activation_height = options_mod.chronicle_activation_height;
 
 pub const MacroExpansion = struct {
     bytecode: []const u8,
@@ -186,7 +184,7 @@ fn compileInternal(
         try engine.main_stack.push(allocator, .{ .type = StackType.integer });
     }
 
-    const sim_report = engine.simulateWithDiagnostics(bytecode, options.max_stack_elements, diagnostics) catch |e| {
+    const sim_report = engine.simulateWithDiagnostics(bytecode, options.effectiveLimits().stack, diagnostics) catch |e| {
         allocator.free(bytecode);
         return switch (e) {
             error.OutOfMemory => MacroError.OutOfMemory,
@@ -224,19 +222,19 @@ fn compileInternal(
      hasher.update(std.mem.asBytes(&options));
      hasher.final(&hash);
 
-    return .{
-        .bytecode = bytecode,
-        .asm_text = asm_text,
-        .hash = hash,
-        .opcode_count = countOpcodes(bytecode),
-        .byte_length = @intCast(bytecode.len),
-         .max_stack_height = if (sim_report.max_stack_height > pre_populated)
-            sim_report.max_stack_height - pre_populated
-        else
-            0,
-         .is_standard = is_standard,
-    };
-}
+     return .{
+         .bytecode = bytecode,
+         .asm_text = asm_text,
+         .hash = hash,
+         .opcode_count = countOpcodes(bytecode),
+         .byte_length = @intCast(bytecode.len),
+          .max_stack_height = if (sim_report.max_stack_height > pre_populated)
+             sim_report.max_stack_height - pre_populated
+         else
+             0,
+          .is_standard = is_standard,
+     };
+ }
 
 pub fn compileComptime(
     comptime source: []const u8,
@@ -326,4 +324,5 @@ test {
     _ = simulator;
     _ = validator;
     _ = encoder;
+    _ = options_mod;
 }

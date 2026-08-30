@@ -4,7 +4,11 @@ const Token = @import("../lexer/token.zig").Token;
 const ast_mod = @import("ast.zig");
 const AstNode = ast_mod.AstNode;
 const Condition = ast_mod.Condition;
-const FeatureFlag = ast_mod.FeatureFlag;
+const LegacyFlag = ast_mod.LegacyFlag;
+const options_mod = @import("../options.zig");
+const Era = options_mod.Era;
+const Network = options_mod.Network;
+const LimitKind = options_mod.LimitKind;
 const ParseError = @import("error.zig").ParseError;
 const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
 const SourceLocation = @import("../diagnostics.zig").SourceLocation;
@@ -134,6 +138,12 @@ pub const Parser = struct {
             return self.parseMacroInvocation();
         }
         if (self.check(.at)) {
+            if (self.pos + 1 < self.tokens.len and
+                self.tokens[self.pos + 1].token == .macro_name and
+                std.mem.eql(u8, self.tokens[self.pos + 1].token.macro_name, "compileError"))
+            {
+                return self.parseCompileError();
+            }
             return self.parseConditional();
         }
         if (self.check(.iterator_var)) {
@@ -218,18 +228,29 @@ pub const Parser = struct {
         const flag_name = flag_tok.token.macro_name;
 
         var condition: Condition = undefined;
-        if (std.mem.eql(u8, flag_name, "bsv")) {
-            condition = .{ .feature_flag = .bsv };
-        } else if (std.mem.eql(u8, flag_name, "chronicle")) {
-            condition = .{ .feature_flag = .chronicle };
-        } else if (std.mem.eql(u8, flag_name, "btc_strict")) {
-            condition = .{ .feature_flag = .btc_strict };
+        if (std.mem.eql(u8, flag_name, "era")) {
+            condition = .{ .era = try self.parseEraName() };
+        } else if (std.mem.eql(u8, flag_name, "has")) {
+            condition = .{ .has_feature = try self.parseParenIdent() };
+        } else if (std.mem.eql(u8, flag_name, "limit")) {
+            condition = try self.parseLimitCondition();
+        } else if (std.mem.eql(u8, flag_name, "network")) {
+            condition = .{ .network = try self.parseNetworkName() };
+        } else if (std.mem.eql(u8, flag_name, "standardness")) {
+            condition = .{ .standardness = try self.parseParenIdent() };
         } else if (std.mem.eql(u8, flag_name, "version")) {
             if (!self.match(.l_bracket)) return ParseError.InvalidCondition;
             if (!self.check(.integer)) return ParseError.InvalidCondition;
             const ver_tok = self.advance();
+            if (ver_tok.token.integer < 0) return ParseError.InvalidCondition;
             condition = .{ .version_check = @intCast(ver_tok.token.integer) };
             if (!self.match(.r_bracket)) return ParseError.InvalidCondition;
+        } else if (std.mem.eql(u8, flag_name, "bsv")) {
+            condition = .{ .legacy_flag = .bsv };
+        } else if (std.mem.eql(u8, flag_name, "chronicle")) {
+            condition = .{ .legacy_flag = .chronicle };
+        } else if (std.mem.eql(u8, flag_name, "btc_strict")) {
+            condition = .{ .legacy_flag = .btc_strict };
         } else {
             return ParseError.InvalidCondition;
         }
@@ -252,6 +273,101 @@ pub const Parser = struct {
                 .else_branch = else_branch,
             },
         };
+    }
+
+    fn parseCompileError(self: *Parser) ParseError!AstNode {
+        _ = self.advance(); // consume @
+        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+        const name_tok = self.advance();
+        if (!std.mem.eql(u8, name_tok.token.macro_name, "compileError")) return ParseError.InvalidCondition;
+
+        if (!self.match(.l_paren)) return ParseError.UnexpectedToken;
+        if (!self.check(.string)) return ParseError.UnexpectedToken;
+        const msg_tok = self.advance();
+        const message = try self.allocator.dupe(u8, msg_tok.token.string);
+        errdefer self.allocator.free(message);
+        if (!self.match(.r_paren)) {
+            self.allocator.free(message);
+            return ParseError.UnexpectedToken;
+        }
+
+        return .{ .compile_error = .{ .message = message } };
+    }
+
+    fn parseParenIdent(self: *Parser) ParseError![]const u8 {
+        if (!self.match(.l_paren)) return ParseError.InvalidCondition;
+        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+        const tok = self.advance();
+        const name = try self.allocator.dupe(u8, tok.token.macro_name);
+        errdefer self.allocator.free(name);
+        if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+        return name;
+    }
+
+    fn parseEraName(self: *Parser) ParseError!Era {
+        if (!self.match(.l_paren)) return ParseError.InvalidCondition;
+        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+        const tok = self.advance();
+        const era = Era.fromString(tok.token.macro_name) orelse return ParseError.InvalidCondition;
+        if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+        return era;
+    }
+
+    fn parseNetworkName(self: *Parser) ParseError!Network {
+        if (!self.match(.l_paren)) return ParseError.InvalidCondition;
+        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+        const tok = self.advance();
+        const network = Network.fromString(tok.token.macro_name) orelse return ParseError.InvalidCondition;
+        if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+        return network;
+    }
+
+    fn parseLimitCondition(self: *Parser) ParseError!Condition {
+        if (!self.match(.l_paren)) return ParseError.InvalidCondition;
+        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+        const kind_tok = self.advance();
+        const kind = LimitKind.fromString(kind_tok.token.macro_name) orelse return ParseError.InvalidCondition;
+        if (!self.match(.comma)) return ParseError.InvalidCondition;
+
+        var threshold: u64 = 0;
+        if (self.check(.integer)) {
+            const int_tok = self.advance();
+            if (int_tok.token.integer < 0) return ParseError.InvalidCondition;
+            threshold = @intCast(int_tok.token.integer);
+        } else {
+            return ParseError.InvalidCondition;
+        }
+
+        var multiplier: u64 = 1;
+        if (self.match(.macro_name)) {
+            const suffix_tok = self.tokens[self.pos - 1];
+            const suffix = suffix_tok.token.macro_name;
+            defer self.allocator.free(suffix);
+            if (std.mem.eql(u8, suffix, "B")) {
+                multiplier = 1;
+            } else if (std.mem.eql(u8, suffix, "KB")) {
+                multiplier = 1000;
+            } else if (std.mem.eql(u8, suffix, "MB")) {
+                multiplier = 1_000_000;
+            } else if (std.mem.eql(u8, suffix, "GB")) {
+                multiplier = 1_000_000_000;
+            } else if (std.mem.eql(u8, suffix, "K")) {
+                multiplier = 1000;
+            } else if (std.mem.eql(u8, suffix, "M")) {
+                multiplier = 1_000_000;
+            } else if (std.mem.eql(u8, suffix, "G")) {
+                multiplier = 1_000_000_000;
+            } else {
+                return ParseError.InvalidCondition;
+            }
+        }
+
+        if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+
+        const scaled = threshold * multiplier;
+        if (scaled > std.math.maxInt(u32)) return ParseError.InvalidCondition;
+
+        return .{ .limit = .{ .kind = kind, .threshold = @intCast(scaled) } };
     }
 
     fn parseBlock(self: *Parser) ParseError!AstNode {
@@ -342,43 +458,7 @@ fn parseSource(allocator: std.mem.Allocator, source: []const u8) ![]const AstNod
 }
 
 fn freeAst(allocator: std.mem.Allocator, nodes: []const AstNode) void {
-    for (nodes) |node| {
-        switch (node) {
-            .macro_invocation => |m| {
-                allocator.free(m.name);
-                for (m.args) |arg| {
-                    switch (arg) {
-                        .string_literal => |s| allocator.free(s),
-                        else => {},
-                    }
-                }
-                allocator.free(m.args);
-                if (m.body) |body| {
-                    freeAst(allocator, body);
-                    allocator.free(body);
-                }
-            },
-            .loop_block => |l| {
-                allocator.free(l.iterator_var);
-                freeAst(allocator, l.body);
-                allocator.free(l.body);
-            },
-            .conditional => |c| {
-                freeAst(allocator, c.then_branch);
-                allocator.free(c.then_branch);
-                if (c.else_branch) |eb| {
-                    freeAst(allocator, eb);
-                    allocator.free(eb);
-                }
-            },
-            .block => |b| {
-                freeAst(allocator, b);
-                allocator.free(b);
-            },
-            .string_literal => |s| allocator.free(s),
-            else => {},
-        }
-    }
+    ast_mod.deinitNodes(nodes, allocator);
 }
 
 test "parse simple opcodes" {

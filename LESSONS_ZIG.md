@@ -133,3 +133,18 @@ i.e. give the root via `-Mroot=` and declare dependency edges with `--dep`, rath
 
 ---
 *Generated during the test‑improvements session on 2026-08-28.*
+
+### Hard-coded flag thresholds rot
+The original conditional-flag implementation compared `@version[N]` against a hard-coded `ver <= 2` and treated `@chronicle` as an alias of `@bsv` (both fired on any BSV target). The redesign replaces both with data-driven evaluation: `@version[N]` reads `options.protocol_version`, and `@chronicle` reads the effective era. Lesson: never encode protocol constants in the expander — put them in `src/options.zig` (single source of truth) and derive everything else.
+
+### `packed struct` + `inline for` gives free string-keyed lookup
+`FeatureSet.hasByName(name)` / `isKnownFeature(name)` use `inline for (@typeInfo(...).@"struct".fields)` over a packed struct — a comptime-unrolled name match that doubles as a registry. Adding a feature means adding one field; no parser or expander changes. Same pattern works for enums (`Era.fromString`).
+
+### Conditional payloads need deep copy in iterator substitution
+`substituteIterator` clones the AST per loop iteration. When a union payload carries heap slices (`Condition.has_feature: []const u8`), a shallow copy aliases the original. The `.conditional` case must dupe the string payloads (see `substituteNode`) or the substituted node frees memory it does not own. If a future Condition variant gains a slice payload, extend that switch.
+
+### OP_LSHIFTNUM / OP_RSHIFTNUM do not exist in bsvz
+Chronicle re-purpose OP_NOP7/OP_NOP8 (0xb6/0xb7) as the numeric shifts, but bsvz's `Opcode` enum has no such names yet. DSL sources (and tests) must use `OP_NOP7`/`OP_NOP8` for now; the `@has(lshiftnum)` feature flag is still the right gate for that bytecode.
+
+---
+*Appended during the flags-system redesign session on 2026-08-30.*

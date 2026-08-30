@@ -277,10 +277,10 @@ pub fn build(b: *std.Build) void {
     const script_engine_tests = b.addTest(.{
         .root_module = script_engine_test_module,
     });
-    const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
-    test_step.dependOn(&run_script_engine_tests.step);
+     const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
+     test_step.dependOn(&run_script_engine_tests.step);
 
-    // Diagnostics tests (compileWithDiagnostics + SourceLocation)
+     // Diagnostics tests (compileWithDiagnostics + SourceLocation)
     const diagnostics_test_module = b.createModule(.{
         .root_source_file = b.path("tests/diagnostics_tests.zig"),
         .target = target,
@@ -308,17 +308,32 @@ pub fn build(b: *std.Build) void {
     const run_user_macros_tests = b.addRunArtifact(user_macros_tests);
     test_step.dependOn(&run_user_macros_tests.step);
 
-    // Bridge tests (P2PKH/P2SH/PELS output helpers)
-    const bridge_test_module = b.createModule(.{
-        .root_source_file = b.path("tests/bridge_tests.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    bridge_test_module.addImport("bsvz-macro", macro_mod);
-    bridge_test_module.addImport("bsvz", bsvz_mod);
-    const bridge_tests = b.addTest(.{
-        .root_module = bridge_test_module,
-    });
-    const run_bridge_tests = b.addRunArtifact(bridge_tests);
-    test_step.dependOn(&run_bridge_tests.step);
-}
+     // Bridge tests (P2PKH/P2SH/PELS output helpers)
+     const bridge_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/bridge_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     bridge_test_module.addImport("bsvz-macro", macro_mod);
+     bridge_test_module.addImport("bsvz", bsvz_mod);
+     const bridge_tests = b.addTest(.{
+         .root_module = bridge_test_module,
+     });
+     const run_bridge_tests = b.addRunArtifact(bridge_tests);
+     test_step.dependOn(&run_bridge_tests.step);
+
+     // Flags system tests (eras, @has, @limit, @network, @standardness,
+     // @compileError, legacy compatibility)
+     const flags_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/flags_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     flags_test_module.addImport("bsvz-macro", macro_mod);
+     flags_test_module.addImport("bsvz", bsvz_mod);
+     const flags_tests = b.addTest(.{
+         .root_module = flags_test_module,
+     });
+     const run_flags_tests = b.addRunArtifact(flags_tests);
+     test_step.dependOn(&run_flags_tests.step);
+ }

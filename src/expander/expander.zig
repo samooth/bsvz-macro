@@ -3,13 +3,14 @@ const Opcode = @import("bsvz").script.opcode.Opcode;
 const builder = @import("bsvz").script.builder;
 const AstNode = @import("../parser/ast.zig").AstNode;
 const Condition = @import("../parser/ast.zig").Condition;
-const FeatureFlag = @import("../parser/ast.zig").FeatureFlag;
+const LegacyFlag = @import("../parser/ast.zig").LegacyFlag;
 const ExpandError = @import("error.zig").ExpandError;
 const MacroTable = @import("table.zig").MacroTable;
 const MacroDefinition = @import("table.zig").MacroDefinition;
 const ParamType = @import("table.zig").ParamType;
 const CompileOptions = @import("../lib.zig").CompileOptions;
-const Target = @import("../lib.zig").Target;
+const FeatureSet = @import("../lib.zig").FeatureSet;
+const StandardnessFlags = @import("../lib.zig").StandardnessFlags;
 const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
 const SourceLocation = @import("../diagnostics.zig").SourceLocation;
 
@@ -97,6 +98,11 @@ pub const Expander = struct {
             },
             .conditional => |c| {
                 return try self.expandConditional(allocator, c);
+            },
+            .compile_error => |e| {
+                const diags = self.diagnostics orelse return ExpandError.CompileError;
+                diags.append(.expand, .@"error", "compile error: {s}", unknownLocation, .{e.message});
+                return ExpandError.CompileError;
             },
             .block => |b| {
                 return try self.expand(allocator, b);
@@ -233,14 +239,7 @@ pub const Expander = struct {
     }
 
     fn expandConditional(self: *Expander, allocator: std.mem.Allocator, cond: @TypeOf(@as(AstNode, undefined).conditional)) ExpandError![]const u8 {
-        const should_expand = switch (cond.condition) {
-            .feature_flag => |flag| switch (flag) {
-                .bsv => self.options.target == .bsv_mainnet or self.options.target == .bsv_testnet,
-                .chronicle => self.options.target == .bsv_mainnet or self.options.target == .bsv_testnet, // Chronicle is BSV
-                .btc_strict => self.options.target == .btc_strict,
-            },
-            .version_check => |ver| ver <= 2, // Default: accept version <= 2
-        };
+        const should_expand = self.evaluateCondition(cond.condition);
 
         if (should_expand) {
             return try self.expand(allocator, cond.then_branch);
@@ -250,7 +249,64 @@ pub const Expander = struct {
             return try allocator.dupe(u8, &.{});
         }
     }
+
+    fn evaluateCondition(self: *Expander, condition: Condition) bool {
+        const features = self.options.effectiveFeatures();
+        return switch (condition) {
+            .era => |era| switch (era) {
+                .satoshi => features.era_satoshi,
+                .bip => features.era_bip,
+                .bch => features.era_bch,
+                .bsv_pre_genesis => features.era_bsv_pre_genesis,
+                .genesis => features.era_genesis,
+                .chronicle => features.era_chronicle,
+            },
+            .has_feature => |name| blk: {
+                if (!FeatureSet.isKnownFeature(name)) {
+                    self.reportUnknownFeature(name);
+                    break :blk false;
+                }
+                break :blk features.hasByName(name);
+            },
+            .limit => |lim| blk: {
+                const limits = self.options.effectiveLimits();
+                const actual: u32 = switch (lim.kind) {
+                    .push => limits.push,
+                    .script => limits.script,
+                    .opcodes => limits.opcodes,
+                    .stack => limits.stack,
+                };
+                break :blk actual >= lim.threshold;
+            },
+            .network => |net| self.options.effectiveNetwork() == net,
+            .standardness => |name| blk: {
+                if (!StandardnessFlags.isKnownFlag(name)) {
+                    self.reportUnknownStandardness(name);
+                    break :blk false;
+                }
+                break :blk self.options.standardness.hasByName(name);
+            },
+            .version_check => |ver| self.options.protocol_version >= ver,
+            .legacy_flag => |flag| switch (flag) {
+                .bsv => features.bsv,
+                .chronicle => features.era_chronicle,
+                .btc_strict => features.btc_strict,
+            },
+        };
+    }
+
+    fn reportUnknownFeature(self: *Expander, name: []const u8) void {
+        const diags = self.diagnostics orelse return;
+        diags.append(.expand, .warning, "unknown feature flag: @has({s}) evaluates to false", unknownLocation, .{name});
+    }
+
+    fn reportUnknownStandardness(self: *Expander, name: []const u8) void {
+        const diags = self.diagnostics orelse return;
+        diags.append(.expand, .warning, "unknown standardness flag: @standardness({s}) evaluates to false", unknownLocation, .{name});
+    }
 };
+
+const unknownLocation: SourceLocation = .{ .line = 0, .column = 0, .offset = 0, .length = 0 };
 
 fn emitMinimalPushInt(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) (std.mem.Allocator.Error || error{ InvalidOpcodeType, DataTooBig })!void {
     if (value == 0) {
@@ -334,11 +390,18 @@ fn substituteNode(allocator: std.mem.Allocator, node: AstNode, var_name: []const
             }
             return .{
                 .conditional = .{
-                    .condition = c.condition,
+                    .condition = switch (c.condition) {
+                        .has_feature => |name| .{ .has_feature = try allocator.dupe(u8, name) },
+                        .standardness => |name| .{ .standardness = try allocator.dupe(u8, name) },
+                        else => c.condition,
+                    },
                     .then_branch = new_then,
                     .else_branch = new_else,
                 },
             };
+        },
+        .compile_error => |e| {
+            return .{ .compile_error = .{ .message = try allocator.dupe(u8, e.message) } };
         },
         .block => |b| {
             return .{ .block = try substituteIterator(allocator, b, var_name, value) };
@@ -373,7 +436,13 @@ fn deinitNode(allocator: std.mem.Allocator, node: AstNode) void {
                 for (eb) |n| deinitNode(allocator, n);
                 allocator.free(eb);
             }
+            switch (c.condition) {
+                .has_feature => |name| allocator.free(name),
+                .standardness => |name| allocator.free(name),
+                else => {},
+            }
         },
+        .compile_error => |e| allocator.free(e.message),
         .block => |b| {
             for (b) |n| deinitNode(allocator, n);
             allocator.free(b);

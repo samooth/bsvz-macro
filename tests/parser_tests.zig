@@ -64,7 +64,9 @@ test "parser: conditional with bsv flag compiles" {
 
 test "parser: conditional with chronicle flag compiles" {
     const allocator = testing.allocator;
-    const result = try bsvz_macro.compile(allocator, "@chronicle{ OP_CAT }", .{});
+    const result = try bsvz_macro.compile(allocator, "@chronicle{ OP_CAT }", .{
+        .era = .chronicle,
+    });
     defer result.deinit(allocator);
     try testing.expect(result.bytecode.len > 0);
 }

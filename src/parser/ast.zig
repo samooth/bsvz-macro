@@ -1,5 +1,9 @@
 const std = @import("std");
 const Opcode = @import("bsvz").script.opcode.Opcode;
+const options_mod = @import("../options.zig");
+const Era = options_mod.Era;
+const Network = options_mod.Network;
+const LimitKind = options_mod.LimitKind;
 
 pub const AstNode = union(enum) {
     opcode_literal: Opcode,
@@ -18,6 +22,9 @@ pub const AstNode = union(enum) {
         then_branch: []const AstNode,
         else_branch: ?[]const AstNode,
     },
+    compile_error: struct {
+        message: []const u8,
+    },
     block: []const AstNode,
     integer_literal: i64,
     string_literal: []const u8,
@@ -25,11 +32,19 @@ pub const AstNode = union(enum) {
 };
 
 pub const Condition = union(enum) {
-    feature_flag: FeatureFlag,
+    era: Era,
+    has_feature: []const u8,
+    limit: struct {
+        kind: LimitKind,
+        threshold: u32,
+    },
+    network: Network,
+    standardness: []const u8,
     version_check: u32,
+    legacy_flag: LegacyFlag,
 };
 
-pub const FeatureFlag = enum {
+pub const LegacyFlag = enum {
     bsv,
     chronicle,
     btc_strict,
@@ -64,6 +79,11 @@ pub fn deinitNodes(nodes: []const AstNode, allocator: std.mem.Allocator) void {
                 allocator.free(l.body);
             },
             .conditional => |c| {
+                switch (c.condition) {
+                    .has_feature => |name| allocator.free(name),
+                    .standardness => |name| allocator.free(name),
+                    else => {},
+                }
                 deinitNodes(c.then_branch, allocator);
                 allocator.free(c.then_branch);
                 if (c.else_branch) |eb| {
@@ -71,6 +91,7 @@ pub fn deinitNodes(nodes: []const AstNode, allocator: std.mem.Allocator) void {
                     allocator.free(eb);
                 }
             },
+            .compile_error => |e| allocator.free(e.message),
             .block => |b| {
                 deinitNodes(b, allocator);
                 allocator.free(b);

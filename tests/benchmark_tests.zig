@@ -206,7 +206,7 @@ test "stress: deeply nested loops" {
 test "stress: many conditional branches" {
     const allocator = testing.allocator;
     const source = "@bsv{ OP_DUP } @chronicle{ OP_DROP } @btc_strict{ OP_NOP }";
-    const result = try bsvz_macro.compile(allocator, source, .{});
+    const result = try bsvz_macro.compile(allocator, source, .{ .era = .chronicle });
     defer result.deinit(allocator);
     try testing.expectEqual(@as(u32, 2), result.byte_length);
 }

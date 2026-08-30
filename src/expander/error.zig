@@ -6,5 +6,6 @@ pub const ExpandError = error{
     LoopBoundTooLarge,
     MacroRecursionDepthExceeded,
     InvalidOpcodeInExpansion,
+    CompileError,
     OutOfMemory,
 };
