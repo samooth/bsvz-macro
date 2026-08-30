@@ -79,12 +79,40 @@ pub const era_bounds = [_]struct { era: Era, start: u32 }{
 
 pub const chronicle_activation_height: u32 = 943_816;
 
-pub fn eraFromBlockHeight(height: u32) Era {
+pub fn eraFromBlockHeightForNetwork(height: u32, network: Network) Era {
     var result: Era = .satoshi;
+    switch (network) {
+        .btc_mainnet, .btc_testnet => {
+            const btc_bounds = [_]struct { era: Era, start: u32 }{
+                .{ .era = .satoshi, .start = 0 },
+                .{ .era = .bip, .start = 173_805 },
+            };
+            for (btc_bounds) |b| {
+                if (height >= b.start) result = b.era;
+            }
+            return result;
+        },
+        .bch_mainnet, .bch_testnet => {
+            const bch_bounds = [_]struct { era: Era, start: u32 }{
+                .{ .era = .satoshi, .start = 0 },
+                .{ .era = .bip, .start = 173_805 },
+                .{ .era = .bch, .start = 478_558 },
+            };
+            for (bch_bounds) |b| {
+                if (height >= b.start) result = b.era;
+            }
+            return result;
+        },
+        .bsv_mainnet, .bsv_testnet, .bsv_regtest => {},
+    }
     for (era_bounds) |b| {
         if (height >= b.start) result = b.era;
     }
     return result;
+}
+
+pub fn eraFromBlockHeight(height: u32) Era {
+    return eraFromBlockHeightForNetwork(height, .bsv_mainnet);
 }
 
 pub fn defaultEraForNetwork(network: Network) Era {
@@ -140,6 +168,15 @@ pub const FeatureSet = packed struct {
     rshift: bool = false,
     lshiftnum: bool = false,
     rshiftnum: bool = false,
+    @"2mul": bool = false,
+    @"2div": bool = false,
+
+    substr: bool = false,
+    left: bool = false,
+    right: bool = false,
+
+    ver: bool = false,
+    verif: bool = false,
 
     cltv: bool = false,
     csv: bool = false,
@@ -304,6 +341,13 @@ pub fn featuresForEra(era: Era) FeatureSet {
             f.otda = true;
             f.codesep_sigsig = true;
             f.bigscript = true;
+            f.@"2mul" = true;
+            f.@"2div" = true;
+            f.substr = true;
+            f.left = true;
+            f.right = true;
+            f.ver = true;
+            f.verif = true;
         },
     }
     return f;
@@ -357,7 +401,7 @@ pub const CompileOptions = struct {
 
     pub fn effectiveEra(self: CompileOptions) Era {
         if (self.era) |e| return e;
-        if (self.block_height) |h| return eraFromBlockHeight(h);
+        if (self.block_height) |h| return eraFromBlockHeightForNetwork(h, self.effectiveNetwork());
         return defaultEraForNetwork(self.effectiveNetwork());
     }
 
@@ -411,15 +455,40 @@ test "options: era features" {
     try std.testing.expect(!chronicle.cltv);
     try std.testing.expect(!chronicle.p2sh);
     try std.testing.expect(!chronicle.malleability_fixes);
+    try std.testing.expect(chronicle.@"2mul");
+    try std.testing.expect(chronicle.@"2div");
+    try std.testing.expect(chronicle.substr);
+    try std.testing.expect(chronicle.left);
+    try std.testing.expect(chronicle.right);
+    try std.testing.expect(chronicle.ver);
+    try std.testing.expect(chronicle.verif);
 
     const genesis = featuresForEra(.genesis);
     try std.testing.expect(genesis.mul);
     try std.testing.expect(!genesis.cltv);
+    try std.testing.expect(!genesis.substr);
+    try std.testing.expect(!genesis.verif);
 
     const bip = featuresForEra(.bip);
     try std.testing.expect(bip.p2sh);
     try std.testing.expect(bip.dersig);
     try std.testing.expect(!bip.cat);
+}
+
+test "options: era boundaries are network-aware" {
+    try std.testing.expectEqual(Era.bip, eraFromBlockHeightForNetwork(620_000, .btc_mainnet));
+    try std.testing.expectEqual(Era.bip, eraFromBlockHeightForNetwork(900_000, .btc_testnet));
+    try std.testing.expectEqual(Era.bch, eraFromBlockHeightForNetwork(700_000, .bch_mainnet));
+    try std.testing.expectEqual(Era.genesis, eraFromBlockHeightForNetwork(620_538, .bsv_mainnet));
+    try std.testing.expectEqual(Era.chronicle, eraFromBlockHeightForNetwork(943_816, .bsv_mainnet));
+    try std.testing.expectEqual(Era.chronicle, eraFromBlockHeightForNetwork(943_816, .bsv_regtest));
+
+    const btc_high = CompileOptions{ .network = .btc_mainnet, .block_height = 620_000 };
+    try std.testing.expectEqual(Era.bip, btc_high.effectiveEra());
+    const bch_high = CompileOptions{ .network = .bch_mainnet, .block_height = 700_000 };
+    try std.testing.expectEqual(Era.bch, bch_high.effectiveEra());
+    const bsv_high = CompileOptions{ .network = .bsv_mainnet, .block_height = 700_000 };
+    try std.testing.expectEqual(Era.genesis, bsv_high.effectiveEra());
 }
 
 test "options: effective layers" {

@@ -296,12 +296,26 @@ pub const Parser = struct {
 
     fn parseParenIdent(self: *Parser) ParseError![]const u8 {
         if (!self.match(.l_paren)) return ParseError.InvalidCondition;
-        if (!self.check(.macro_name)) return ParseError.InvalidCondition;
-        const tok = self.advance();
-        const name = try self.allocator.dupe(u8, tok.token.macro_name);
-        errdefer self.allocator.free(name);
-        if (!self.match(.r_paren)) return ParseError.InvalidCondition;
-        return name;
+
+        if (self.check(.macro_name)) {
+            const tok = self.advance();
+            const name = try self.allocator.dupe(u8, tok.token.macro_name);
+            errdefer self.allocator.free(name);
+            if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+            return name;
+        }
+
+        if (self.check(.integer) and self.peek().token.integer >= 0 and self.peek().token.integer <= 9) {
+            const digit = self.advance();
+            if (!self.check(.macro_name)) return ParseError.InvalidCondition;
+            const tok = self.advance();
+            const name = try std.fmt.allocPrint(self.allocator, "{d}{s}", .{ digit.token.integer, tok.token.macro_name });
+            errdefer self.allocator.free(name);
+            if (!self.match(.r_paren)) return ParseError.InvalidCondition;
+            return name;
+        }
+
+        return ParseError.InvalidCondition;
     }
 
     fn parseEraName(self: *Parser) ParseError!Era {

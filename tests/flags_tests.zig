@@ -480,3 +480,20 @@ test "flags: malleability_fixes only pre-chronicle" {
     defer chronicle.deinit(allocator);
     try testing.expectEqualSlices(u8, &[_]u8{0x75}, chronicle.bytecode);
 }
+
+test "flags: chronicle string-opcode features are chronicle-only" {
+    const allocator = testing.allocator;
+    const features = [_][]const u8{ "substr", "left", "right", "2mul", "2div", "ver", "verif" };
+    for (features) |feat| {
+        var source_buf: [96]u8 = undefined;
+        const source = try std.fmt.bufPrint(&source_buf, "@has({s}){{ OP_DUP }} else {{ OP_DROP }}", .{feat});
+
+        const chronicle = try bsvz_macro.compile(allocator, source, .{ .era = .chronicle });
+        defer chronicle.deinit(allocator);
+        try testing.expectEqualSlices(u8, &[_]u8{0x76}, chronicle.bytecode);
+
+        const genesis = try bsvz_macro.compile(allocator, source, .{ .era = .genesis });
+        defer genesis.deinit(allocator);
+        try testing.expectEqualSlices(u8, &[_]u8{0x75}, genesis.bytecode);
+    }
+}

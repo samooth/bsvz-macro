@@ -33,7 +33,7 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 - **11 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, `PUSHTX_FRAGMENT`
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
 - **Conditional compilation, 4 orthogonal layers**: eras (`@era(chronicle)`),
-  features (`@has(cat)`, `@has(mul)`, `@has(otda)`, ...), limits
+  features (`@has(cat)`, `@has(substr)`, `@has(otda)`, ...), limits
   (`@limit(push, 32MB)`), networks (`@network(bsv_mainnet)`), plus
   `@standardness(flag)` predicates, `@compileError("msg")`, and legacy
   `@bsv` / `@chronicle` / `@btc_strict` / `@version[n]`
@@ -287,10 +287,11 @@ pub const CompileOptions = struct {
 ```
 
 Effective values resolve as `network ?? Network.fromTarget(target)`,
-`era ?? eraFromBlockHeight(block_height) ?? defaultEraForNetwork(network)`,
-and `features ∪ featuresForEra(era)`. The whole struct is hashed verbatim
-into the result hash — changing any option changes the hash even when the
-bytecode is identical.
+`era ?? eraFromBlockHeightForNetwork(block_height, network) ??
+defaultEraForNetwork(network)` (height→era is network-aware: BTC caps at
+`bip`, BCH at `bch`), and `features ∪ featuresForEra(era)`. The whole struct
+is hashed verbatim into the result hash — changing any option changes the
+hash even when the bytecode is identical.
 
 ## Testing
 

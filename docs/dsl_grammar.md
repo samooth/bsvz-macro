@@ -53,7 +53,7 @@ dead branch never fires).
 
 | Directive | Evaluates true when |
 |---|---|
-| `@era(e)` | the effective era equals `e`. Effective era = `options.era` ?? `eraFromBlockHeight(options.block_height)` ?? `defaultEraForNetwork(options.network ?? target)` |
+| `@era(e)` | the effective era equals `e` (exact match). Effective era = `options.era` ?? `eraFromBlockHeightForNetwork(block_height, network ?? target)` ?? `defaultEraForNetwork(network ?? target)`. Height→era is network-aware: BTC never leaves `bip`, BCH caps at `bch`, only BSV reaches `bsv_pre_genesis`/`genesis`/`chronicle` |
 | `@has(f)` | the effective feature set contains `f`. The feature set is `options.features` OR-ed with `featuresForEra(effective_era)`, plus `bsv`/`btc_strict` derived from the network. Unknown names emit a warning and evaluate to false |
 | `@limit(kind, n)` | the effective limit of `kind` is `>= n`. Legacy `max_script_size`/`max_stack_elements`/`max_push_size` override `limits.script`/`limits.stack`/`limits.push` when non-default |
 | `@network(net)` | the effective network equals `net` (`options.network` wins over legacy `target`) |

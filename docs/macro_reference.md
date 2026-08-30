@@ -163,13 +163,17 @@ statement   ::= opcode | macro "[" args "]" "{" body "}"
 Four orthogonal layers, all evaluated against `CompileOptions`:
 
 - **Era**: `@era(satoshi|bip|bch|bsv_pre_genesis|genesis|chronicle)` —
-  protocol era, auto-derived from `block_height` when set, else from the
-  network's default. `@era(X)` implicitly enables every `@has(...)` feature
-  of that era.
+  protocol era, auto-derived from `block_height` when set (network-aware:
+  BTC caps at `bip`, BCH at `bch`; the bsv_pre_genesis/genesis/chronicle
+  boundaries are BSV history), else from the network's default. `@era(X)`
+  implicitly enables every `@has(...)` feature of that era.
 - **Features**: `@has(cat)`, `@has(mul)`, `@has(lshiftnum)`, `@has(otda)`,
-  `@has(p2sh)`, `@has(cltv)`, `@has(forkid)`, `@has(bigscript)`, ... — the
-  era-derived feature set (see `src/options.zig` for the full table). Unknown
-  names warn and evaluate false.
+  `@has(substr)`, `@has(left)`, `@has(right)`, `@has(2mul)`, `@has(2div)`,
+  `@has(ver)`, `@has(verif)`, `@has(p2sh)`, `@has(cltv)`, `@has(forkid)`,
+  `@has(bigscript)`, ... — the era-derived feature set (see `src/options.zig`
+  for the full table). The Chronicle string opcodes (`substr`/`left`/`right`),
+  `2mul`/`2div`, `ver`/`verif` are chronicle-era only. Unknown names warn and
+  evaluate false.
 - **Limits**: `@limit(push, 32MB)`, `@limit(script, 10MB)`,
   `@limit(opcodes, 1M)`, `@limit(stack, 1000)` — true when the effective
   limit is at least the requested magnitude. Suffixes `K`/`M`/`G`

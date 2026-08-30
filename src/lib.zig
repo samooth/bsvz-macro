@@ -31,6 +31,7 @@ pub const LimitSet = options_mod.LimitSet;
 pub const LimitKind = options_mod.LimitKind;
 pub const CompileOptions = options_mod.CompileOptions;
 pub const eraFromBlockHeight = options_mod.eraFromBlockHeight;
+pub const eraFromBlockHeightForNetwork = options_mod.eraFromBlockHeightForNetwork;
 pub const featuresForEra = options_mod.featuresForEra;
 pub const chronicle_activation_height = options_mod.chronicle_activation_height;
 

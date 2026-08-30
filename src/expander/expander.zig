@@ -10,6 +10,7 @@ const MacroDefinition = @import("table.zig").MacroDefinition;
 const ParamType = @import("table.zig").ParamType;
 const CompileOptions = @import("../lib.zig").CompileOptions;
 const FeatureSet = @import("../lib.zig").FeatureSet;
+const LimitSet = @import("../lib.zig").LimitSet;
 const StandardnessFlags = @import("../lib.zig").StandardnessFlags;
 const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
 const SourceLocation = @import("../diagnostics.zig").SourceLocation;
@@ -20,6 +21,8 @@ const max_expansion_opcodes = 1_000_000;
 pub const Expander = struct {
     table: *const MacroTable,
     options: CompileOptions,
+    resolved_features: FeatureSet,
+    resolved_limits: LimitSet,
     recursion_depth: u8 = 0,
     total_opcodes: usize = 0,
     diagnostics: ?*DiagnosticList = null,
@@ -29,6 +32,8 @@ pub const Expander = struct {
         return .{
             .table = table,
             .options = options,
+            .resolved_features = options.effectiveFeatures(),
+            .resolved_limits = options.effectiveLimits(),
         };
     }
 
@@ -251,7 +256,7 @@ pub const Expander = struct {
     }
 
     fn evaluateCondition(self: *Expander, condition: Condition) bool {
-        const features = self.options.effectiveFeatures();
+        const features = self.resolved_features;
         return switch (condition) {
             .era => |era| switch (era) {
                 .satoshi => features.era_satoshi,
@@ -269,12 +274,11 @@ pub const Expander = struct {
                 break :blk features.hasByName(name);
             },
             .limit => |lim| blk: {
-                const limits = self.options.effectiveLimits();
                 const actual: u32 = switch (lim.kind) {
-                    .push => limits.push,
-                    .script => limits.script,
-                    .opcodes => limits.opcodes,
-                    .stack => limits.stack,
+                    .push => self.resolved_limits.push,
+                    .script => self.resolved_limits.script,
+                    .opcodes => self.resolved_limits.opcodes,
+                    .stack => self.resolved_limits.stack,
                 };
                 break :blk actual >= lim.threshold;
             },
