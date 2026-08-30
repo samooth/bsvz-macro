@@ -10,6 +10,8 @@ const MacroDefinition = @import("table.zig").MacroDefinition;
 const ParamType = @import("table.zig").ParamType;
 const CompileOptions = @import("../lib.zig").CompileOptions;
 const Target = @import("../lib.zig").Target;
+const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
+const SourceLocation = @import("../diagnostics.zig").SourceLocation;
 
 const max_recursion_depth = 32;
 const max_expansion_opcodes = 1_000_000;
@@ -19,6 +21,8 @@ pub const Expander = struct {
     options: CompileOptions,
     recursion_depth: u8 = 0,
     total_opcodes: usize = 0,
+    diagnostics: ?*DiagnosticList = null,
+    stmt_locs: []const SourceLocation = &.{},
 
     pub fn init(table: *const MacroTable, options: CompileOptions) Expander {
         return .{
@@ -32,11 +36,14 @@ pub const Expander = struct {
         allocator: std.mem.Allocator,
         nodes: []const AstNode,
     ) ExpandError![]const u8 {
-        var out = std.ArrayListUnmanaged(u8){};
+        var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
 
-        for (nodes) |node| {
-            const bytes = try self.expandNode(allocator, node);
+        for (nodes, 0..) |node, i| {
+            const bytes = self.expandNode(allocator, node) catch |e| {
+                self.reportExpand(e, i);
+                return e;
+            };
             defer allocator.free(bytes);
             try out.appendSlice(allocator, bytes);
         }
@@ -44,23 +51,32 @@ pub const Expander = struct {
         return out.toOwnedSlice(allocator);
     }
 
+    fn reportExpand(self: *Expander, err: anyerror, stmt_index: usize) void {
+        const diags = self.diagnostics orelse return;
+        const loc: SourceLocation = if (self.stmt_locs.len > stmt_index)
+            self.stmt_locs[stmt_index]
+        else
+            .{ .line = 0, .column = 0, .offset = 0, .length = 0 };
+        diags.append(.expand, .@"error", "expand error: {s}", loc, .{@errorName(err)});
+    }
+
     fn expandNode(self: *Expander, allocator: std.mem.Allocator, node: AstNode) ExpandError![]const u8 {
         switch (node) {
             .opcode_literal => |op| {
                 self.total_opcodes += 1;
                 if (self.total_opcodes > max_expansion_opcodes) return ExpandError.Overflow;
-                var out = std.ArrayListUnmanaged(u8){};
+                var out: std.ArrayListUnmanaged(u8) = .empty;
                 try out.append(allocator, op.toByte());
                 return out.toOwnedSlice(allocator);
             },
             .integer_literal => |val| {
-                var out = std.ArrayListUnmanaged(u8){};
+                var out: std.ArrayListUnmanaged(u8) = .empty;
                 emitMinimalPushInt(&out, allocator, val) catch return ExpandError.TypeMismatch;
                 return out.toOwnedSlice(allocator);
             },
             .string_literal => |str| {
                 // Try hex decode first, else treat as raw bytes
-                var out = std.ArrayListUnmanaged(u8){};
+                var out: std.ArrayListUnmanaged(u8) = .empty;
                 if (str.len >= 2 and str[0] == '0' and str[1] == 'x') {
                     const hex_str = str[2..];
                     if (hex_str.len % 2 != 0) return ExpandError.TypeMismatch;
@@ -149,7 +165,7 @@ pub const Expander = struct {
         if (loop.bound == 0) return try allocator.dupe(u8, &.{});
         if (loop.bound > 1000) return ExpandError.LoopBoundTooLarge;
 
-        var out = std.ArrayListUnmanaged(u8){};
+        var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
 
         for (0..@as(usize, @intCast(loop.bound))) |i| {

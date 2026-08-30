@@ -44,7 +44,7 @@ fn xswapExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]con
     if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
     const n = args[0].integer_literal;
     if (n < 1) return ExpandError.TypeMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_PICK);
@@ -61,7 +61,7 @@ fn xdropExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]con
     if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
     const n = args[0].integer_literal;
     if (n < 1) return ExpandError.TypeMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_ROLL);
@@ -75,7 +75,7 @@ fn xrotExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]cons
     if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
     const n = args[0].integer_literal;
     if (n < 1) return ExpandError.TypeMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     emitMinimalPushInt(&out, allocator, n - 1) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_ROLL);
@@ -84,7 +84,7 @@ fn xrotExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]cons
 
 fn hashcatExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = args; _ = body; _ = table;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_DUP);
     try emitOpcode(&out, allocator, .OP_SHA256);
@@ -95,7 +95,7 @@ fn hashcatExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]c
 
 fn ifdupExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = args; _ = body; _ = table;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_DUP);
     try emitOpcode(&out, allocator, .OP_IF);
@@ -106,7 +106,7 @@ fn ifdupExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]con
 
 fn safeDivExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = args; _ = body; _ = table;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_SWAP);
     try emitOpcode(&out, allocator, .OP_DUP);
@@ -122,7 +122,7 @@ fn rangeCheckExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
     if (args[0] != .integer_literal or args[1] != .integer_literal) return ExpandError.TypeMismatch;
     const min = args[0].integer_literal;
     const max = args[1].integer_literal;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_DUP);
     emitMinimalPushInt(&out, allocator, min) catch return ExpandError.TypeMismatch;
@@ -137,7 +137,7 @@ fn rangeCheckExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
 
 fn p2pkhFromPubkeyExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = args; _ = body; _ = table;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try emitOpcode(&out, allocator, .OP_DUP);
     try emitOpcode(&out, allocator, .OP_HASH160);
@@ -151,7 +151,7 @@ fn p2pkhFromPubkeyExpand(allocator: std.mem.Allocator, args: []const AstNode, bo
 fn verifyAllExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;
     if (args.len < 1) return ExpandError.ArityMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // BOOLAND chain: pop N items, verify all are true
     for (1..args.len) |_| {
@@ -164,7 +164,7 @@ fn verifyAllExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[
 fn verifyAnyExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;
     if (args.len < 1) return ExpandError.ArityMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // BOOLOR chain: pop N items, verify at least one is true
     for (1..args.len) |_| {
@@ -180,7 +180,7 @@ fn pushTxFragmentExpand(allocator: std.mem.Allocator, args: []const AstNode, bod
     if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
     const n = args[0].integer_literal;
     if (n < 1 or n > 10) return ExpandError.TypeMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // PUSHTX helper: PICK n; DUP; HASH256; CAT
     // Per WP1605 (nChain, 2021) section 1.2 message construction:
@@ -319,7 +319,7 @@ fn requireStringArg(arg: AstNode) ExpandError![]const u8 {
 fn pushTxTocanonicalExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;
     if (args.len != 0) return ExpandError.ArityMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // [toCanonical]: force s in [0, n/2]; if s > n/2, replace with n - s.
     try emitOpcode(&out, allocator, .OP_DUP);
@@ -336,7 +336,7 @@ fn pushTxTocanonicalExpand(allocator: std.mem.Allocator, args: []const AstNode, 
 fn pushTxConcatenationsExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;
     if (args.len != 0) return ExpandError.ArityMismatch;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // [concatenations]: build DER bytes (30 || len || 02 20 Gx 02 || s) from r (below) and s (top).
     // Per WP1605 [concatenations]:= OP_SIZE OP_DUP <0x24> OP_ADD <0x30> OP_SWAP OP_CAT
@@ -369,7 +369,7 @@ fn reverseEndianness32(allocator: std.mem.Allocator) ExpandError![]u8 {
     // Total: 93 opcodes. This is the main contributor to the ~228 bytes
     // of endianness overhead in the full PUSHTX (per Federico Barbacovi's
     // article, https://hackmd.io/@federicobarbacovi/By6zkFmfyl).
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // OP_1 OP_SPLIT repeated 31 times: splits off the last byte 31 times,
     // leaving 31 single-byte items + 1 remaining byte on the stack.
@@ -397,7 +397,7 @@ fn pushTxToderExpand(allocator: std.mem.Allocator, args: []const AstNode, body: 
     // Without this reversal, the DER signature has s in little-endian
     // (from OP_ADD/OP_MOD math) instead of big-endian (required by DER),
     // producing an invalid signature. We add the reversal here.
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     const canonical = try pushTxTocanonicalExpand(allocator, args, null, table);
     defer allocator.free(canonical);
@@ -416,7 +416,7 @@ fn pushTxSignExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
     if (args.len != 1) return ExpandError.ArityMismatch;
     if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
     const sighash = args[0].integer_literal;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // [sign] with k=a=1: OP_HASH256 <Gx> OP_ADD <n> OP_MOD [toDER] <sighash> OP_CAT <Gcomp> OP_CAT
     try emitOpcode(&out, allocator, .OP_HASH256);
@@ -450,7 +450,7 @@ fn pushTxOutputsRequestExpand(allocator: std.mem.Allocator, args: []const AstNod
     if (args.len != 2) return ExpandError.ArityMismatch;
     const item8_hex = try requireStringArg(args[0]);
     const items10_11_hex = try requireStringArg(args[1]);
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // [outputsRequest]:= OP_2DUP OP_HASH256 OP_SWAP <item 8> OP_CAT OP_SWAP OP_CAT <item 10 and 11> OP_CAT
     try emitOpcode(&out, allocator, .OP_2DUP);
@@ -477,7 +477,7 @@ fn pelsLockingScriptExpand(allocator: std.mem.Allocator, args: []const AstNode, 
     defer allocator.free(pk_bytes);
     if (pk_bytes.len != 20) return ExpandError.TypeMismatch;
 
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
 
     const orq = try pushTxOutputsRequestExpand(allocator, args[1..3], null, table);
@@ -523,7 +523,7 @@ fn pelsLockingScriptBitShiftExpand(allocator: std.mem.Allocator, args: []const A
     defer allocator.free(pk_bytes);
     if (pk_bytes.len != 20) return ExpandError.TypeMismatch;
 
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
 
     const orq = try pushTxOutputsRequestExpand(allocator, args[2..4], null, table);
@@ -565,7 +565,7 @@ fn pushTxSignBitShiftExpand(allocator: std.mem.Allocator, args: []const AstNode,
     const idx: usize = @intCast(security - 2);
     const data = PUSHTX_BIT_SHIFT_DATA[idx];
 
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     // PUSHTX_BIT_SHIFT: take top of stack (the message hash digest z = HASH256(preimage)),
     // right-shift by `security` bits, then build the DER signature inline.
