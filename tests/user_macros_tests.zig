@@ -6,7 +6,7 @@ fn myDupDropExpand(allocator: std.mem.Allocator, args: []const bsvz_macro.AstNod
     _ = args;
     _ = body;
     _ = table;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     try out.appendSlice(allocator, &.{ 0x76, 0x75 });
     return out.toOwnedSlice(allocator);
@@ -18,7 +18,7 @@ fn doubleArgExpand(allocator: std.mem.Allocator, args: []const bsvz_macro.AstNod
     if (args.len != 1) return error.ArityMismatch;
     if (args[0] != .integer_literal) return error.TypeMismatch;
     const n = args[0].integer_literal;
-    var out = std.ArrayListUnmanaged(u8){};
+    var out: std.ArrayListUnmanaged(u8) = .empty;
     defer out.deinit(allocator);
     var i: i64 = 0;
     while (i < n) : (i += 1) {
