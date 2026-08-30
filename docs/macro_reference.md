@@ -103,6 +103,18 @@ Full Perpetually Enforcing Locking Script from WP1605 §1.3 (Figure 1). Composes
 - Arity: 4 (integer, string, string, string)
 - Expansion: `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
 
+### PUSHTX_SIGN_BIT_SHIFT[security, sighash_flag]
+PUSHTX [sign] block per zkscript_package (WP1605 §1.4 / sCrypt optimisation). Uses `k = 2^security` instead of `k = 1`, avoiding the expensive `(z + Gx) mod n` computation. The signature is built inline using a precomputed `R = 2^security * G` and a "public key" `P = a * G` such that `a * R_x ≡ -1 mod n`. The unlocking key must grind `tx_in.sequence` until `HASH256(z) % 2^security == 1` and `HASH256(z) >> security >= 2^248`.
+- Arity: 2 (integer, integer) — `security ∈ {2, 3}`, `sighash_flag` (e.g. 1 for SIGHASH_ALL)
+- Stack: `[.., z, ..]` → `[.., z, .., <DER(R,s) || sighash || P>]` (verified by OP_CHECKSIG)
+- Expansion: `push security OP_RSHIFT push <prefix || R || 0x0220> OP_SWAP OP_CAT push <sighash_flag> OP_CAT push P OP_CHECKSIG`
+- Size: ~85 bytes (vs ~355 bytes for `PUSHTX_SIGN`)
+
+### PELS_LOCKING_SCRIPT_BIT_SHIFT[security, sighash_flag, item8_hex, items10_11_hex, pk_b_hash160_hex]
+PELS locking script using the bit-shift `PUSHTX_SIGN_BIT_SHIFT` instead of `PUSHTX_SIGN`. Same structure as `PELS_LOCKING_SCRIPT` but with the much smaller signature block. The unlocking key must grind `tx_in.sequence` (typically ~4-8 iterations) until the hash satisfies the bit-shift constraints.
+- Arity: 5 (integer, integer, string, string, string)
+- Expansion: `[outputsRequest] [sign_bit_shift] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
+
 ## DSL Syntax
 
 ```

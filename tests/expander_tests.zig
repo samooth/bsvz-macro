@@ -273,6 +273,31 @@ test "expander: PUSHTX_SIGN with non-integer sighash fails" {
     try testing.expectError(error.ExpandError, result);
 }
 
+test "expander: PUSHTX_SIGN includes endianness reversal" {
+    // Bug fix verification: per the zkscript reference implementation
+    // (int_sig_to_s_component), the s value must be reversed from
+    // little-endian (produced by OP_ADD/OP_MOD) to big-endian (required
+    // by DER) before building the signature. This is done via 31
+    // repetitions of OP_1 OP_SPLIT followed by 31 repetitions of
+    // OP_SWAP OP_CAT (total 93 opcodes).
+    //
+    // Without endianness reversal, the DER signature would have s in
+    // little-endian, which is invalid for Bitcoin signatures.
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_SIGN[1]", .{});
+    defer result.deinit(allocator);
+
+    // Count OP_1 OP_SPLIT pairs: should be exactly 31 (for 32-byte reversal)
+    var split_count: usize = 0;
+    var i: usize = 0;
+    while (i + 1 < result.bytecode.len) : (i += 1) {
+        if (result.bytecode[i] == 0x51 and result.bytecode[i + 1] == 0x7f) {
+            split_count += 1;
+        }
+    }
+    try testing.expectEqual(@as(usize, 31), split_count);
+}
+
 test "expander: PELS_LOCKING_SCRIPT emits the WP1605 §1.3 layout" {
     // The PELS locking script from Figure 1 of the white paper.
     // First opcodes should be the start of PUSHTX_OUTPUTS_REQUEST
@@ -321,6 +346,67 @@ test "expander: PELS_LOCKING_SCRIPT rejects non-string pk_b_hash160" {
         .{},
     );
     try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT[2] emits expected bytecode" {
+    // PUSHTX_BIT_SHIFT with k=4: the script must contain OP_RSHIFT (0xca)
+    // and OP_CHECKSIG (0xac), and the embedded R value for sec=2.
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[2, 1]", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+
+    // OP_RSHIFT must be present
+    const op_rshift: u8 = 0x99;
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &[_]u8{op_rshift}) != null);
+    // OP_CHECKSIG must be present
+    const op_checksig: u8 = 0xac;
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &[_]u8{op_checksig}) != null);
+    // The R value for sec=2 starts with 0x02e493db...
+    const r_marker = [_]u8{ 0x02, 0xe4, 0x93, 0xdb };
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &r_marker) != null);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT[3] emits expected bytecode" {
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[3, 1]", .{});
+    defer result.deinit(allocator);
+    try testing.expect(result.bytecode.len > 0);
+
+    // The R value for sec=3 starts with 0x022f01e5...
+    const r_marker = [_]u8{ 0x02, 0x2f, 0x01, 0xe5 };
+    try testing.expect(std.mem.indexOf(u8, result.bytecode, &r_marker) != null);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT rejects security < 2" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[1, 1]", .{});
+    try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT rejects security > 3" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[4, 1]", .{});
+    try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT rejects wrong arity" {
+    const allocator = testing.allocator;
+    const result = bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[2]", .{});
+    try testing.expectError(error.ExpandError, result);
+}
+
+test "expander: PUSHTX_SIGN_BIT_SHIFT is much shorter than PUSHTX_SIGN" {
+    // The bit-shift optimization should save ~200 bytes by avoiding
+    // the (z + Gx) mod n computation and the endianness reversal.
+    const allocator = testing.allocator;
+    const slow = try bsvz_macro.compile(allocator, "PUSHTX_SIGN[1]", .{});
+    defer slow.deinit(allocator);
+    const fast = try bsvz_macro.compile(allocator, "PUSHTX_SIGN_BIT_SHIFT[2, 1]", .{});
+    defer fast.deinit(allocator);
+
+    // fast should be at least 150 bytes shorter
+    try testing.expect(fast.bytecode.len + 150 <= slow.bytecode.len);
 }
 
 // secp256k1 curve constants used by PUSHTX tests.
