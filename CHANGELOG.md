@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **WASM/JS API: full `CompileOptions` forwarding.** The `bsvz_compile` export and
+  `BsvzMacro.compile()` now accept the options that were previously silent
+  defaults: `era`, `network`, `blockHeight`, `protocolVersion`, `txVersion`,
+  `features` (array of feature names), and `standardness` (array of flag names).
+  JS enum maps (`Network`, `Era`, `FEATURES`, `STANDARDNESS`) are exported so
+  consumers can validate values; integer codes match the Zig enums in
+  `src/options.zig`.
+- New WASM exports: `bsvz_scratch_alloc` / `bsvz_scratch_free` (temporary
+  string buffers for feature/standardness names).
+- WASM FFI tests extended with conditional-compilation cases: feature flags and
+  era select different branches, and out-of-range network/era returns
+  `invalid_option`.
+
+### Fixed
+
+- `docs/TESTING.md` coverage section: the `Step.Compile.coverage` field is not
+  present in this Zig 0.16.0-dev build; documented as a future wiring task instead
+  of wiring a non-functional flag.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added

@@ -55,6 +55,57 @@ function readString(mem, ptr, len) {
   return decoder.decode(new Uint8Array(mem.buffer, ptr, len));
 }
 
+// Extended compile helper that exercises the full 16-param signature,
+// forwarding conditional-compilation options (era, features, standardness, ...).
+function compileWithOptions(e, mem, src, opts) {
+  const encoded = encoder.encode(src);
+  const srcPtr = e.bsvz_compile_alloc(encoded.length);
+  assert.notStrictEqual(srcPtr, 0, "source alloc non-null");
+  new Uint8Array(mem.buffer, srcPtr, encoded.length).set(encoded);
+
+  // Features as comma-separated names.
+  const features = (opts.features ?? []).join(",");
+  const featEnc = encoder.encode(features);
+  const featPtr = featEnc.length > 0 ? e.bsvz_scratch_alloc(featEnc.length) : 0;
+  if (featPtr !== 0) {
+    new Uint8Array(mem.buffer, featPtr, featEnc.length).set(featEnc);
+  }
+
+  // Standardness as comma-separated flag names (undefined = use defaults).
+  const stdStr = opts.standardness ? opts.standardness.join(",") : "";
+  const stdEnc = encoder.encode(stdStr);
+  const stdPtr = stdEnc.length > 0 ? e.bsvz_scratch_alloc(stdEnc.length) : 0;
+  if (stdPtr !== 0) {
+    new Uint8Array(mem.buffer, stdPtr, stdEnc.length).set(stdEnc);
+  }
+
+  const UNSET = 4294967295; // maxInt(u32) sentinel = "use default"
+  const status = e.bsvz_compile(
+    srcPtr,
+    encoded.length,
+    opts.target ?? 0,
+    opts.enforceStandardness ?? 1,
+    opts.maxScriptSize ?? 10_000,
+    opts.maxStackElements ?? 1_000,
+    opts.maxPushSize ?? 520,
+    opts.emitAsm ?? 0,
+    opts.network ?? UNSET,
+    opts.era ?? UNSET,
+    opts.blockHeight ?? UNSET,
+    opts.protocolVersion ?? 1,
+    opts.txVersion ?? 1,
+    featPtr,
+    featEnc.length,
+    stdPtr,
+    stdEnc.length,
+  );
+
+  if (featPtr !== 0) e.bsvz_scratch_free(featPtr, featEnc.length);
+  if (stdPtr !== 0) e.bsvz_scratch_free(stdPtr, stdEnc.length);
+
+  return status;
+}
+
 test("valid compile returns ok and getters report results", async () => {
   const { instance, e, mem } = await instantiate();
   const [ptr, len] = allocSource(e, mem, "OP_DUP");
@@ -174,5 +225,70 @@ test("bsvz_free resets result and is idempotent", async () => {
   assert.strictEqual(e.bsvz_bytecode_len(), 0, "bytecode len 0 after free");
 
   // Second free must not throw.
-  assert.doesNotThrow(() => e.bsvz_free(), "double free is safe");
+  assert.doesNotThrow(() => e.bsvz_free(), "double free is free is safe");
+});
+
+test("conditional feature flag controls emitted bytecode", async () => {
+  const { instance, e, mem } = await instantiate();
+  // lshiftnum is chronicle-only → disabled under the default (genesis) era.
+  // Forwarding it via the features param must select the then-branch.
+  const src = "@has(lshiftnum){ OP_DUP } else { OP_DROP }";
+
+  // With lshiftnum forwarded, the then-branch (OP_DUP = 0x76) is emitted.
+  const withFeat = compileWithOptions(e, mem, src, { features: ["lshiftnum"] });
+  assert.strictEqual(withFeat, 0, "compile with lshiftnum forwarded ok");
+  assert.strictEqual(e.bsvz_bytecode_len(), 1, "exactly one byte with feature");
+  assert.strictEqual(new Uint8Array(mem.buffer, e.bsvz_bytecode_ptr(), 1)[0], 0x76,
+    "emits OP_DUP (0x76) when feature forwarded");
+  e.bsvz_free();
+
+  // Without the feature, the default era lacks lshiftnum → else-branch
+  // (OP_DROP = 0x75).
+  const noFeat = compileWithOptions(e, mem, src, { features: [] });
+  assert.strictEqual(noFeat, 0, "compile without feature ok");
+  assert.strictEqual(e.bsvz_bytecode_len(), 1, "exactly one byte without feature");
+  assert.strictEqual(new Uint8Array(mem.buffer, e.bsvz_bytecode_ptr(), 1)[0], 0x75,
+    "emits OP_DROP (0x75) when feature absent");
+  e.bsvz_free();
+});
+
+test("era option affects conditional compilation", async () => {
+  const { instance, e, mem } = await instantiate();
+  // cat is enabled in chronicle but not in bip era.
+  const src = "@era(chronicle){ OP_DUP } else { OP_DROP }";
+
+  // Chronicle era (5) → then-branch (OP_DUP = 0x76).
+  const chronicle = compileWithOptions(e, mem, src, { era: 5 });
+  assert.strictEqual(chronicle, 0, "compile under chronicle era ok");
+  assert.strictEqual(new Uint8Array(mem.buffer, e.bsvz_bytecode_ptr(), 1)[0], 0x76,
+    "emits OP_DUP under chronicle era");
+  e.bsvz_free();
+
+  // Bip era (1) lacks cat → else-branch (OP_DROP = 0x75).
+  const bip = compileWithOptions(e, mem, src, { era: 1 });
+  assert.strictEqual(bip, 0, "compile under bip era ok");
+  assert.strictEqual(new Uint8Array(mem.buffer, e.bsvz_bytecode_ptr(), 1)[0], 0x75,
+    "emits OP_DROP under bip era");
+  e.bsvz_free();
+});
+
+test("invalid network or era returns invalid_option", async () => {
+  const { instance, e, mem } = await instantiate();
+  const [ptr, len] = allocSource(e, mem, "OP_DUP");
+
+  // network = 99 is out of range.
+  const badNetwork = e.bsvz_compile(
+    ptr, len, 0, 1, 10_000, 1_000, 520, 0,
+    99, 4294967295, 4294967295, 1, 1, 0, 0, 0, 0,
+  );
+  assert.strictEqual(badNetwork, -8, "invalid network → invalid_option");
+
+  // era = 99 is out of range.
+  const badEra = e.bsvz_compile(
+    ptr, len, 0, 1, 10_000, 1_000, 520, 0,
+    4294967295, 99, 4294967295, 1, 1, 0, 0, 0, 0,
+  );
+  assert.strictEqual(badEra, -8, "invalid era → invalid_option");
+
+  e.bsvz_free();
 });

@@ -61,6 +61,53 @@ export fn bsvz_compile_alloc(len: usize) ?[*]u8 {
     return buf.ptr;
 }
 
+// Scratch allocation for temporary buffers (e.g. feature/standardness name
+// strings passed from JS). Not tracked globally — caller frees via
+// bsvz_scratch_free.
+export fn bsvz_scratch_alloc(len: usize) ?[*]u8 {
+    if (len == 0 or len > max_source_bytes) return null;
+    const buf = alloc.alloc(u8, len) catch return null;
+    return buf.ptr;
+}
+
+export fn bsvz_scratch_free(ptr: [*]u8, len: usize) void {
+    alloc.free(ptr[0..len]);
+}
+
+fn parseFeatureSet(names: []const u8) macro.FeatureSet {
+    var fs = macro.FeatureSet{};
+    if (names.len == 0) return fs;
+    var it = std.mem.splitScalar(u8, names, ',');
+    while (it.next()) |name| {
+        if (name.len == 0) continue;
+        inline for (@typeInfo(macro.FeatureSet).@"struct".fields) |f| {
+            if (std.mem.eql(u8, name, f.name)) {
+                @field(fs, f.name) = true;
+                break;
+            }
+        }
+    }
+    return fs;
+}
+
+fn parseStandardness(names: []const u8) macro.StandardnessFlags {
+    var sf = macro.StandardnessFlags{};
+    if (names.len == 0) return sf;
+    // When names are provided, enable only the named flags (start from all-false).
+    sf = .{};
+    var it = std.mem.splitScalar(u8, names, ',');
+    while (it.next()) |name| {
+        if (name.len == 0) continue;
+        inline for (@typeInfo(macro.StandardnessFlags).@"struct".fields) |f| {
+            if (std.mem.eql(u8, name, f.name)) {
+                @field(sf, f.name) = true;
+                break;
+            }
+        }
+    }
+    return sf;
+}
+
 export fn bsvz_compile(
     src: [*]const u8,
     src_len: usize,
@@ -70,12 +117,29 @@ export fn bsvz_compile(
     max_stack_elements: u32,
     max_push_size: u32,
     emit_asm: u32,
+    network: u32,
+    era: u32,
+    block_height: u32,
+    protocol_version: u32,
+    tx_version: u32,
+    features_ptr: [*]const u8,
+    features_len: usize,
+    standardness_ptr: [*]const u8,
+    standardness_len: usize,
 ) i32 {
     if (src_len == 0 or src_len > max_source_bytes) {
         last_status = .invalid_input;
         return @intFromEnum(last_status);
     }
     if (target > @intFromEnum(macro.Target.btc_strict)) {
+        last_status = .invalid_option;
+        return @intFromEnum(last_status);
+    }
+    if (network != std.math.maxInt(u32) and network > @intFromEnum(macro.Network.bsv_regtest)) {
+        last_status = .invalid_option;
+        return @intFromEnum(last_status);
+    }
+    if (era != std.math.maxInt(u32) and era > @intFromEnum(macro.Era.chronicle)) {
         last_status = .invalid_option;
         return @intFromEnum(last_status);
     }
@@ -89,8 +153,19 @@ export fn bsvz_compile(
         src_buf = copy;
     }
 
+    const features = parseFeatureSet(features_ptr[0..features_len]);
+    const standardness = parseStandardness(standardness_ptr[0..standardness_len]);
+
+    last_status = .ok;
     const options = macro.CompileOptions{
         .target = @enumFromInt(target),
+        .network = if (network == std.math.maxInt(u32)) null else @enumFromInt(network),
+        .era = if (era == std.math.maxInt(u32)) null else @enumFromInt(era),
+        .block_height = if (block_height == std.math.maxInt(u32)) null else block_height,
+        .protocol_version = protocol_version,
+        .tx_version = tx_version,
+        .features = features,
+        .standardness = standardness,
         .enforce_standardness = enforce_standardness != 0,
         .max_script_size = max_script_size,
         .max_stack_elements = @intCast(@min(max_stack_elements, std.math.maxInt(u16))),
