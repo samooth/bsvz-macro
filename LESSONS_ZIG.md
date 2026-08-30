@@ -143,8 +143,11 @@ The original conditional-flag implementation compared `@version[N]` against a ha
 ### Conditional payloads need deep copy in iterator substitution
 `substituteIterator` clones the AST per loop iteration. When a union payload carries heap slices (`Condition.has_feature: []const u8`), a shallow copy aliases the original. The `.conditional` case must dupe the string payloads (see `substituteNode`) or the substituted node frees memory it does not own. If a future Condition variant gains a slice payload, extend that switch.
 
-### OP_LSHIFTNUM / OP_RSHIFTNUM do not exist in bsvz
-Chronicle re-purpose OP_NOP7/OP_NOP8 (0xb6/0xb7) as the numeric shifts, but bsvz's `Opcode` enum has no such names yet. DSL sources (and tests) must use `OP_NOP7`/`OP_NOP8` for now; the `@has(lshiftnum)` feature flag is still the right gate for that bytecode.
+### Downstream opcode-name gaps: version-gate the workaround
+When a dependency lags the spec (bsvz 0.1.0 lacked `OP_LSHIFTNUM`/`OP_RSHIFTNUM`), resist forking names into the DSL permanently. Keep a documented stand-in (`OP_NOP7`), file upstream, and swap to the real names the release lands — bsvz 0.2.0 added `OP_SUBSTR`/`OP_LEFT`/`OP_RIGHT`/`OP_LSHIFTNUM`/`OP_RSHIFTNUM`/`OP_2MUL`/`OP_2DIV` as first-class variants with `OP_NOP4`–`OP_NOP8` kept as aliases, so both old and new scripts keep lexing.
+
+### Simulator must learn new opcode stack shapes
+Adding a name to the lexer map is not enough. Each new opcode needs its net stack effect in `src/simulator/engine.zig` (`substr/left/right` are −1, `lshiftnum/rshiftnum` are −1, `2mul/2div` are neutral), otherwise `max_stack_height` silently misreports and net-negative ops hide stack underflow. When bsvz renames an opcode family, prune the old names from the simulator's do-nothing branches (`.OP_NOP4`–`.OP_NOP8` had to leave the NOP case) or both branches will claim the same byte.
 
 ---
 *Appended during the flags-system redesign session on 2026-08-30.*

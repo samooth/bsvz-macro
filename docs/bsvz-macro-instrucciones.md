@@ -272,7 +272,7 @@ LOOP[5]{ OP_<i> OP_ADD }
 ### Compilacion condicional: 4 capas ortogonales
 
 ```
-@era(chronicle){ OP_NOP7 } else { OP_NOP }          // era del protocolo
+@era(chronicle){ OP_LSHIFTNUM } else { OP_NOP }      // era del protocolo
 @has(cat){ OP_CAT } else { OP_NOP }                 // feature de la era
 @limit(push, 32MB){ OP_DUP } else { OP_DROP }        // limite efectivo
 @network(bsv_mainnet){ OP_DUP } else { OP_DROP }    // red

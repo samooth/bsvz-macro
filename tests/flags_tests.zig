@@ -5,7 +5,7 @@ const testing = std.testing;
 
 test "flags: @era selects then branch in matching era" {
     const allocator = testing.allocator;
-    const source = "@era(chronicle){ OP_NOP7 } else { OP_NOP }";
+    const source = "@era(chronicle){ OP_LSHIFTNUM } else { OP_NOP }";
 
     const chronicle = try bsvz_macro.compile(allocator, source, .{ .era = .chronicle });
     defer chronicle.deinit(allocator);
@@ -74,11 +74,11 @@ test "flags: @has(unknown) parses and evaluates false with warning" {
 
 test "flags: @has(lshiftnum) requires chronicle era" {
     const allocator = testing.allocator;
-    const source = "@has(lshiftnum){ OP_NOP7 } else { OP_NOP }";
+    const source = "@has(lshiftnum){ OP_LSHIFTNUM } else { OP_NOP }";
 
     const chronicle = try bsvz_macro.compile(allocator, source, .{ .era = .chronicle });
     defer chronicle.deinit(allocator);
-    const chronicle_expected = try bsvz_macro.compile(allocator, "OP_NOP7", .{});
+    const chronicle_expected = try bsvz_macro.compile(allocator, "OP_LSHIFTNUM", .{});
     defer chronicle_expected.deinit(allocator);
     try testing.expectEqualSlices(u8, chronicle_expected.bytecode, chronicle.bytecode);
 
@@ -257,11 +257,11 @@ test "flags: @compileError without diagnostics still fails" {
 
 test "flags: nested flags compose" {
     const allocator = testing.allocator;
-    const source = "@era(chronicle){ @has(lshiftnum){ OP_NOP7 } else { OP_LSHIFT } } else { @has(cat){ OP_CAT } else { OP_NOP } }";
+    const source = "@era(chronicle){ @has(lshiftnum){ OP_LSHIFTNUM } else { OP_LSHIFT } } else { @has(cat){ OP_CAT } else { OP_NOP } }";
 
     const chronicle = try bsvz_macro.compile(allocator, source, .{ .era = .chronicle });
     defer chronicle.deinit(allocator);
-    const chronicle_expected = try bsvz_macro.compile(allocator, "OP_NOP7", .{});
+    const chronicle_expected = try bsvz_macro.compile(allocator, "OP_LSHIFTNUM", .{});
     defer chronicle_expected.deinit(allocator);
     try testing.expectEqualSlices(u8, chronicle_expected.bytecode, chronicle.bytecode);
 
@@ -496,4 +496,68 @@ test "flags: chronicle string-opcode features are chronicle-only" {
         defer genesis.deinit(allocator);
         try testing.expectEqualSlices(u8, &[_]u8{0x75}, genesis.bytecode);
     }
+}
+
+test "flags: chronicle opcodes emit correct bytes and round-trip through ASM" {
+    const allocator = testing.allocator;
+    const cases = [_]struct { name: []const u8, byte: u8 }{
+        .{ .name = "OP_SUBSTR", .byte = 0xb3 },
+        .{ .name = "OP_LEFT", .byte = 0xb4 },
+        .{ .name = "OP_RIGHT", .byte = 0xb5 },
+        .{ .name = "OP_LSHIFTNUM", .byte = 0xb6 },
+        .{ .name = "OP_RSHIFTNUM", .byte = 0xb7 },
+        .{ .name = "OP_2MUL", .byte = 0x8d },
+        .{ .name = "OP_2DIV", .byte = 0x8e },
+    };
+    for (cases) |case| {
+        const result = try bsvz_macro.compile(allocator, case.name, .{ .era = .chronicle });
+        defer result.deinit(allocator);
+        try testing.expectEqualSlices(u8, &[_]u8{case.byte}, result.bytecode);
+
+        const asm_text = try bsvz_macro.toAsm(allocator, result.bytecode);
+        defer allocator.free(asm_text);
+        const roundtrip = try bsvz_macro.fromAsm(allocator, asm_text);
+        defer allocator.free(roundtrip);
+        try testing.expectEqualSlices(u8, result.bytecode, roundtrip);
+    }
+}
+
+test "flags: legacy NOP names still lex after bsvz 0.2.0 rename" {
+    const allocator = testing.allocator;
+    const cases = [_]struct { name: []const u8, byte: u8 }{
+        .{ .name = "OP_NOP4", .byte = 0xb3 },
+        .{ .name = "OP_NOP7", .byte = 0xb6 },
+        .{ .name = "OP_NOP8", .byte = 0xb7 },
+    };
+    for (cases) |case| {
+        const result = try bsvz_macro.compile(allocator, case.name, .{});
+        defer result.deinit(allocator);
+        try testing.expectEqualSlices(u8, &[_]u8{case.byte}, result.bytecode);
+    }
+}
+
+test "flags: chronicle numeric opcodes keep stack heights correct" {
+    const allocator = testing.allocator;
+    {
+        const result = try bsvz_macro.compile(allocator, "OP_LSHIFTNUM", .{ .era = .chronicle });
+        defer result.deinit(allocator);
+        try testing.expectEqual(@as(u16, 0), result.max_stack_height);
+    }
+    {
+        const result = try bsvz_macro.compile(allocator, "OP_2MUL", .{ .era = .chronicle });
+        defer result.deinit(allocator);
+        try testing.expectEqual(@as(u16, 0), result.max_stack_height);
+    }
+    {
+        const result = try bsvz_macro.compile(allocator, "OP_SUBSTR", .{ .era = .chronicle });
+        defer result.deinit(allocator);
+        try testing.expectEqual(@as(u16, 0), result.max_stack_height);
+    }
+}
+
+test "flags: LOOP over chronicle opcodes unrolls" {
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "LOOP[4]{ OP_2MUL OP_2DIV }", .{ .era = .chronicle });
+    defer result.deinit(allocator);
+    try testing.expectEqual(@as(u32, 8), result.byte_length);
 }

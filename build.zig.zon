@@ -5,11 +5,11 @@
     .fingerprint = 0x48e4df2574bbddf5,
     .dependencies = .{
         .bsvz = .{
-            .url = "https://github.com/samooth/bsvz/archive/1712e38e0eb1a215f215ca59364340b28c854e05.tar.gz",
-            .hash = "bsvz-0.1.0-wvsL-dviFQDU2Al1QQBlT1s8lDJPmNDXLWdg1-1Q4fBw",
+            .url = "https://github.com/samooth/bsvz/archive/refs/tags/v0.2.0.tar.gz",
+            .hash = "bsvz-0.2.0-wvsL-a2NFgBd_iD1vq1jlixrjH2pun9ZyN1EVzwxdZd-",
         },
     },
-.overrides = .{},
+    .overrides = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",

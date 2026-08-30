@@ -274,6 +274,13 @@ pub const SymbolicEngine = struct {
                 try self.main_stack.push(a, .{ .type = StackType{ .bytes = 0 } });
                 try self.main_stack.push(a, .{ .type = StackType{ .bytes = 0 } });
             },
+            .OP_SUBSTR, .OP_LEFT, .OP_RIGHT => {
+                const idx = try self.main_stack.pop();
+                const data = try self.main_stack.pop();
+                if (std.meta.activeTag(idx.type) != .integer) return SimError.TypeMismatch;
+                _ = data;
+                try self.main_stack.push(a, .{ .type = StackType{ .bytes = 0 } });
+            },
             .OP_SIZE => {
                 try self.main_stack.push(a, .{ .type = StackType{ .integer = {} } });
             },
@@ -308,7 +315,8 @@ pub const SymbolicEngine = struct {
                 try self.main_stack.push(a, .{ .type = StackType{ .bytes = 0 } });
             },
 
-            .OP_1ADD, .OP_1SUB, .OP_NEGATE, .OP_ABS => {
+            .OP_1ADD, .OP_1SUB, .OP_NEGATE, .OP_ABS,
+            .OP_2MUL, .OP_2DIV => {
                 const item = try self.main_stack.pop();
                 if (std.meta.activeTag(item.type) != .integer) return SimError.TypeMismatch;
                 try self.main_stack.push(a, .{ .type = StackType.integer });
@@ -331,6 +339,7 @@ pub const SymbolicEngine = struct {
             },
             .OP_ADD, .OP_SUB, .OP_MUL, .OP_DIV, .OP_MOD,
             .OP_LSHIFT, .OP_RSHIFT,
+            .OP_LSHIFTNUM, .OP_RSHIFTNUM,
             .OP_NUMEQUAL, .OP_NUMNOTEQUAL, .OP_LESSTHAN,
             .OP_GREATERTHAN, .OP_LESSTHANOREQUAL, .OP_GREATERTHANOREQUAL,
             .OP_MIN, .OP_MAX => {
@@ -398,7 +407,7 @@ pub const SymbolicEngine = struct {
                 _ = item;
             },
             .OP_RETURN => return SimError.VerifyFailed,
-            .OP_NOP, .OP_NOP1, .OP_NOP4, .OP_NOP5, .OP_NOP6, .OP_NOP7, .OP_NOP8, .OP_NOP9, .OP_NOP10 => {},
+            .OP_NOP, .OP_NOP1, .OP_NOP9, .OP_NOP10 => {},
             .OP_IF, .OP_NOTIF, .OP_ELSE, .OP_ENDIF => {
                 if (op == .OP_IF or op == .OP_NOTIF) {
                     const cond = try self.main_stack.pop();
