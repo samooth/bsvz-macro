@@ -215,6 +215,18 @@ fn emitPushBytes(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator,
     builder.appendPushData(out, allocator, data) catch return ExpandError.OutOfMemory;
 }
 
+fn emitPushBytesSafe(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, data: []const u8) ExpandError!void {
+    // Like emitPushBytes but always uses OP_PUSHDATA1 to avoid ambiguity
+    // when the data starts with a byte that could be interpreted as a
+    // push opcode. The bsvz appendPushData uses the length as a direct
+    // push opcode for l <= 75, which can be ambiguous if the first
+    // data byte is in the range 0x01-0x4b.
+    if (data.len > 0xff) return ExpandError.Overflow;
+    try out.append(allocator, 0x4c); // OP_PUSHDATA1
+    try out.append(allocator, @intCast(data.len));
+    try out.appendSlice(allocator, data);
+}
+
 fn emitPushInt32LE(out: *std.ArrayListUnmanaged(u8), allocator: std.mem.Allocator, value: i64) ExpandError!void {
     if (value < 0 or value > 0xffffffff) return ExpandError.Overflow;
     const v: u32 = @intCast(value);
@@ -348,6 +360,13 @@ fn pushTxSignExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
     try emitOpcode(&out, allocator, .OP_CAT);
     return out.toOwnedSlice(allocator);
 }
+
+// Alt-stack optimized variants per WP1605 §1.4.
+// White paper errata: the published sequence has [sign] pushing Gx first
+// (so Gx is on top of the alt stack) and [toCanonical] then comparing s
+// with Gx/2 instead of n/2. The corrected sequence pushes n first, so
+// n is on top of the alt stack; [toCanonical] pops n, computes n/2, and
+// replaces s with n - s when s > n/2 (matching the original semantics).
 
 fn pushTxOutputsRequestExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;

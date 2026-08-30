@@ -267,17 +267,31 @@ pub fn build(b: *std.Build) void {
      const run_bench_tests = b.addRunArtifact(bench_tests);
      test_step.dependOn(&run_bench_tests.step);
 
-     // Example tests using helpers (demonstrates helper value)
-     const examples_test_module = b.createModule(.{
-         .root_source_file = b.path("tests/examples_tests.zig"),
-         .target = target,
-         .optimize = optimize,
-     });
-     examples_test_module.addImport("bsvz-macro", macro_mod);
-     examples_test_module.addImport("bsvz", bsvz_mod);
-     const examples_tests = b.addTest(.{
-         .root_module = examples_test_module,
-     });
-     const run_examples_tests = b.addRunArtifact(examples_tests);
-     test_step.dependOn(&run_examples_tests.step);
+    // Example tests using helpers (demonstrates helper value)
+    const examples_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/examples_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    examples_test_module.addImport("bsvz-macro", macro_mod);
+    examples_test_module.addImport("bsvz", bsvz_mod);
+    const examples_tests = b.addTest(.{
+        .root_module = examples_test_module,
+    });
+    const run_examples_tests = b.addRunArtifact(examples_tests);
+    test_step.dependOn(&run_examples_tests.step);
+
+    // Script-engine integration tests (bsvz ScriptEngine wiring smoke test)
+    const script_engine_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/script_engine_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    script_engine_test_module.addImport("bsvz-macro", macro_mod);
+    script_engine_test_module.addImport("bsvz", bsvz_mod);
+    const script_engine_tests = b.addTest(.{
+        .root_module = script_engine_test_module,
+    });
+    const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
+    test_step.dependOn(&run_script_engine_tests.step);
 }
