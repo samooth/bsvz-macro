@@ -54,34 +54,34 @@ zig build test -Doptimize=ReleaseSafe   # enables safety checks + stack traces
 
 ## Coverage reporting
 
-Zig supports instrumentation-based coverage. To enable it for this project,
-flip the coverage flag on the test compile steps in `build.zig`, for example:
-
-```zig
-const main_tests = b.addTest(.{ .root_module = macro_mod });
-main_tests.coverage = true; // Zig 0.16: emits a raw profile next to the binary
-```
-
-Then run and post-process with `llvm-cov` (shipped with Zig):
+Zig supports instrumentation-based coverage. Enabling it for this project would
+require wiring the coverage flag onto each test compile step in `build.zig`,
+then post-processing the run with `llvm-cov` (shipped with Zig):
 
 ```sh
-zig build test
-# produces ./zig-cache/.../test (with embedded coverage)
-llvm-cov report \
-  ./.zig-cache/o/*/test \
+zig build test -Dcoverage
+llvm-cov report ./.zig-cache/o/*/test \
   --instr-profile ./.zig-cache/o/*/test.profdata \
   --object ./.zig-cache/o/*/test
 ```
 
-Alternatively, for a one-off module, run `zig build test` (dependencies are
-fetched automatically) and point `llvm-cov` at the generated test binary under
-`.zig-cache/o/*/`. Manual `zig test` invocations must reference the cached
-package sources from the Zig global cache rather than local sibling paths.
+> **Status:** the `Step.Compile.coverage` field that earlier Zig 0.16 builds
+> exposed is **not present** in this Zig 0.16.0-dev build, so the flag is not yet
+> wired. Coverage reporting is documented as a future wiring task; until then
+> the test suite is verified for correctness and leaks only (see "Validation"
+> above). To add it, each `addTest(...)` step in `build.zig` needs the
+> instrumentation enabled via whatever mechanism the installed Zig build system
+> exposes (check `std.Build.Step.Compile` fields for the current version), and a
+> `-Dcoverage` option threaded through.
 
-Coverage is **not** wired on by default. See `build.zig.zon` (dependencies are
-fetched automatically from GitHub) and `.github/workflows/ci.yml` for the setup.
-The Zig package manager downloads and caches `bsvz`/`zig-wallet-toolbox` on
-first build, so no manual checkout is required for coverage either.
+`zig build test` produces the test binary under `.zig-cache/o/*/`. Manual `zig
+test` invocations must reference the cached package sources from the Zig global
+cache rather than local sibling paths.
+
+See `build.zig.zon` (dependencies are fetched automatically) and
+`.github/workflows/ci.yml` for the CI setup. The Zig package manager downloads
+and caches `bsvz` on first build, so no manual checkout is needed for coverage
+either.
 
 ## Performance benchmarks & baselines
 

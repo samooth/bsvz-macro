@@ -34,10 +34,16 @@
 ## In progress (user WIP, do not touch)
 — none —
 
+- [x] PUSHTX leftovers: §1.4 alt-stack `outputsRequest` optimisation
+      (`PUSHTX_OUTPUTS_REQUEST_FAST` in `src/prelude.zig`) paired with
+      `PELS_LOCKING_SCRIPT_FAST`; `compileWithUnlockingScript()` entry point in
+      `src/lib.zig` lets PELS scripts simulate end-to-end (the symbolic
+      simulator does not model the unlocking script's pubkey). Documented in
+      `macro_reference.md` / `PUSHTX.md` / `README.md`; tested in
+      `tests/pushtx_fast_tests.zig`.
+
 ## Next steps
-1. PUSHTX leftovers: §1.4 optimized `outputsRequest` (no macro yet — needs a
-   spec/design); PELS bare-invocation `SimError` (simulator does not model a
-   pre-existing pubkey; documented in `docs/PUSHTX.md`).
+— none —
 
 ## Notes / risks
 - Blueprint Phase 1–6 checkboxes are verified this round.
