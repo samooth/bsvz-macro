@@ -569,6 +569,35 @@ fn pushTxOutputsRequestExpand(allocator: std.mem.Allocator, args: []const AstNod
     return out.toOwnedSlice(allocator);
 }
 
+fn pushTxOutputsRequestFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body; _ = table;
+    if (args.len != 2) return ExpandError.ArityMismatch;
+    const item8_hex = try requireStringArg(args[0]);
+    const items10_11_hex = try requireStringArg(args[1]);
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    // [outputsRequest_FAST] per WP1605 §1.4 (alt-stack optimisation):
+    //   OP_2DUP OP_CAT OP_TOALTSTACK OP_SWAP OP_CAT OP_HASH256
+    //   <item 8> OP_SWAP OP_CAT OP_FROMALTSTACK OP_SWAP OP_CAT OP_CAT
+    //   <item 10 and 11> OP_CAT
+    try emitOpcode(&out, allocator, .OP_2DUP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_TOALTSTACK);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_HASH256);
+    try emitPushHexString(&out, allocator, item8_hex);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_FROMALTSTACK);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitPushHexString(&out, allocator, items10_11_hex);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    return out.toOwnedSlice(allocator);
+}
+
 fn pelsLockingScriptExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body;
     if (args.len != 4) return ExpandError.ArityMismatch;
@@ -593,6 +622,56 @@ fn pelsLockingScriptExpand(allocator: std.mem.Allocator, args: []const AstNode, 
     defer allocator.free(sign);
     try out.appendSlice(allocator, sign);
 
+    try emitOpcode(&out, allocator, .OP_CHECKSIGVERIFY);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    emitMinimalPushInt(&out, allocator, 0x68) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_SPLIT);
+    try emitOpcode(&out, allocator, .OP_NIP);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    emitMinimalPushInt(&out, allocator, 0x8) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_SPLIT);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, .OP_DUP);
+    try emitOpcode(&out, allocator, .OP_HASH160);
+    try emitPushBytes(&out, allocator, pk_bytes);
+    try emitOpcode(&out, allocator, .OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, .OP_CHECKSIG);
+    return out.toOwnedSlice(allocator);
+}
+
+fn pelsLockingScriptFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    if (args.len != 4) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+    _ = try requireStringArg(args[1]);
+    _ = try requireStringArg(args[2]);
+    const pk_b_hash160_hex = try requireStringArg(args[3]);
+
+    const pk_bytes = decodeHexAlloc(allocator, pk_b_hash160_hex) catch return ExpandError.TypeMismatch;
+    defer allocator.free(pk_bytes);
+    if (pk_bytes.len != 20) return ExpandError.TypeMismatch;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    // WP1605 §1.4 optimised PELS: [outputsRequest_FAST] [sign] + tail.
+    // outputsRequest_FAST applies the §1.4 alt-stack optimisation. We reuse the
+    // same tail as PELS_LOCKING_SCRIPT: the white paper's further short-tail
+    // form assumes an unlocking-script stack layout that the generic symbolic
+    // simulator setup does not reproduce, so the full tail keeps simulation
+    // correct while still benefiting from the cheaper outputsRequest.
+    const orq = try pushTxOutputsRequestFastExpand(allocator, args[1..3], null, table);
+    defer allocator.free(orq);
+    try out.appendSlice(allocator, orq);
+
+    const sign_args = [_]AstNode{args[0]};
+    const sign = try pushTxSignExpand(allocator, &sign_args, null, table);
+    defer allocator.free(sign);
+    try out.appendSlice(allocator, sign);
+
+    // Full tail (same as PELS_LOCKING_SCRIPT).
     try emitOpcode(&out, allocator, .OP_CHECKSIGVERIFY);
     try emitOpcode(&out, allocator, .OP_SWAP);
     emitMinimalPushInt(&out, allocator, 0x68) catch return ExpandError.TypeMismatch;
@@ -744,6 +823,8 @@ pub fn registerCanonicalMacros(table: *MacroTable) !void {
     try table.register("PUSHTX_SIGN_FAST", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = pushTxSignFastExpand });
     try table.register("PUSHTX_SIGN_BIT_SHIFT", .{ .arity = 2, .param_types = &.{ .integer, .integer }, .expand_fn = pushTxSignBitShiftExpand });
     try table.register("PUSHTX_OUTPUTS_REQUEST", .{ .arity = 2, .param_types = &.{ .string, .string }, .expand_fn = pushTxOutputsRequestExpand });
+    try table.register("PUSHTX_OUTPUTS_REQUEST_FAST", .{ .arity = 2, .param_types = &.{ .string, .string }, .expand_fn = pushTxOutputsRequestFastExpand });
     try table.register("PELS_LOCKING_SCRIPT", .{ .arity = 4, .param_types = &.{ .integer, .string, .string, .string }, .expand_fn = pelsLockingScriptExpand });
+    try table.register("PELS_LOCKING_SCRIPT_FAST", .{ .arity = 4, .param_types = &.{ .integer, .string, .string, .string }, .expand_fn = pelsLockingScriptFastExpand });
     try table.register("PELS_LOCKING_SCRIPT_BIT_SHIFT", .{ .arity = 5, .param_types = &.{ .integer, .integer, .string, .string, .string }, .expand_fn = pelsLockingScriptBitShiftExpand });
 }

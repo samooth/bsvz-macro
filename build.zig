@@ -277,10 +277,24 @@ pub fn build(b: *std.Build) void {
     const script_engine_tests = b.addTest(.{
         .root_module = script_engine_test_module,
     });
-     const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
-     test_step.dependOn(&run_script_engine_tests.step);
+    const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
+    test_step.dependOn(&run_script_engine_tests.step);
 
-     // Diagnostics tests (compileWithDiagnostics + SourceLocation)
+    // WP1605 §1.4 FAST pair + pubkey-injection tests
+    const pushtx_fast_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/pushtx_fast_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    pushtx_fast_test_module.addImport("bsvz-macro", macro_mod);
+    pushtx_fast_test_module.addImport("bsvz", bsvz_mod);
+    const pushtx_fast_tests = b.addTest(.{
+        .root_module = pushtx_fast_test_module,
+    });
+    const run_pushtx_fast_tests = b.addRunArtifact(pushtx_fast_tests);
+    test_step.dependOn(&run_pushtx_fast_tests.step);
+
+    // Diagnostics tests (compileWithDiagnostics + SourceLocation)
     const diagnostics_test_module = b.createModule(.{
         .root_source_file = b.path("tests/diagnostics_tests.zig"),
         .target = target,

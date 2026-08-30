@@ -829,6 +829,15 @@ OP_CHECKSIG
 
 True
 
+> **Implementation note:** the §1.4 alt-stack `[outputsRequest]` is available as the
+> `PUSHTX_OUTPUTS_REQUEST_FAST` macro, and the optimised PELS as
+> `PELS_LOCKING_SCRIPT_FAST`. Because the symbolic simulator does not model the
+> unlocking script, PELS scripts return `error.SimError` under plain `compile()`.
+> Use `compileWithUnlockingScript()` with dummy unlocking items (a `.bytes`
+> pubkey plus data items) to simulate PELS end-to-end; the FAST variant needs a
+> deeper stack than the non-FAST PELS because its alt-stack `outputsRequest`
+> consumes items differently.
+
 Further improvement can be made by using the alt stack for storing 𝐺𝑥 and 𝑛. Each of them is
 𝑛
 

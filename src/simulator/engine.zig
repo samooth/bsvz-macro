@@ -77,6 +77,23 @@ pub const SymbolicEngine = struct {
         self.transitions.deinit(self.allocator);
     }
 
+    /// Pushes `items` onto the bottom of the main stack (in order), so they sit
+    /// below the items a locking script expects to find. Used to model items
+    /// left by the unlocking script (e.g. `<sig> <pubkey>`) before the locking
+    /// script runs. Unlike the fixed pre-populated integers, these are opt-in
+    /// via `compileWithUnlockingScript`.
+    pub fn prependStackItems(self: *SymbolicEngine, items: []const StackItem) !void {
+        // Insert at index 0 in reverse so the first item ends up deepest.
+        var i: usize = items.len;
+        while (i > 0) {
+            i -= 1;
+            try self.main_stack.items.insert(self.allocator, 0, items[i]);
+        }
+        if (self.main_stack.items.items.len > self.main_stack.max_height) {
+            self.main_stack.max_height = self.main_stack.items.items.len;
+        }
+    }
+
     pub fn simulate(self: *SymbolicEngine, bytecode: []const u8, max_stack: u16) SimError!SimulationReport {
         return self.simulateWithDiagnostics(bytecode, max_stack, null);
     }

@@ -63,7 +63,7 @@ pub fn compile(
     source: []const u8,
     options: CompileOptions,
 ) MacroError!MacroExpansion {
-    return compileInternal(allocator, source, options, null, null);
+    return compileInternal(allocator, source, options, null, null, &.{});
 }
 
 pub const diagnostics_mod = @import("diagnostics.zig");
@@ -84,7 +84,7 @@ pub fn compileWithDiagnostics(
     options: CompileOptions,
     diagnostics: *DiagnosticList,
 ) MacroError!MacroExpansion {
-    return compileInternal(allocator, source, options, diagnostics, null);
+    return compileInternal(allocator, source, options, diagnostics, null, &.{});
 }
 
 /// Compile against a caller-owned macro table. The table must already contain
@@ -96,7 +96,7 @@ pub fn compileWithTable(
     options: CompileOptions,
     table: *MacroTable,
 ) MacroError!MacroExpansion {
-    return compileInternal(allocator, source, options, null, table);
+    return compileInternal(allocator, source, options, null, table, &.{});
 }
 
 /// Compile against a caller-owned macro table, accumulating diagnostics.
@@ -107,7 +107,27 @@ pub fn compileWithTableAndDiagnostics(
     table: *MacroTable,
     diagnostics: *DiagnosticList,
 ) MacroError!MacroExpansion {
-    return compileInternal(allocator, source, options, diagnostics, table);
+    return compileInternal(allocator, source, options, diagnostics, table, &.{});
+}
+
+/// Compile as if `unlocking_items` were already on the stack below the locking
+/// script — modelling the contribution of the unlocking script (e.g. the
+/// `<sig> <pubkey>` pair in P2PKH-like scripts). This lets scripts such as
+/// `PELS_LOCKING_SCRIPT`, which assume a pre-existing pubkey, simulate
+/// end-to-end. `compile()` passes an empty slice and is unaffected.
+///
+/// The symbolic simulator only type-checks (`StackType.pubkey` /
+/// `StackType.bytes` satisfy `OP_CHECKSIGVERIFY`); no real cryptography is
+/// performed, so a dummy 33-byte value is sufficient.
+pub const StackItem = @import("simulator/stack.zig").StackItem;
+
+pub fn compileWithUnlockingScript(
+    allocator: std.mem.Allocator,
+    source: []const u8,
+    options: CompileOptions,
+    unlocking_items: []const StackItem,
+) MacroError!MacroExpansion {
+    return compileInternal(allocator, source, options, null, null, unlocking_items);
 }
 
 /// Register a user-defined macro into `table`. The name and param types are
@@ -126,6 +146,7 @@ fn compileInternal(
     options: CompileOptions,
     diagnostics: ?*DiagnosticList,
     custom_table: ?*@import("expander/table.zig").MacroTable,
+    extra_stack_items: []const @import("simulator/stack.zig").StackItem,
 ) MacroError!MacroExpansion {
     // Scratch arena: backs all lexer tokens, the parser AST, and the per-
     // statement source locations. These are pure scratch — the returned
@@ -176,13 +197,21 @@ fn compileInternal(
     var engine = SymbolicEngine.init(allocator);
     defer engine.deinit();
 
-    // Pre-populate stack with dummy items for macro expansion simulation
-    // Macros are meant to be used with existing stack items.
-    // We use .integer so subsequent arithmetic ops don't trigger type errors.
+    // Pre-populate the stack before the locking script runs. Normally we push
+    // 4 .integer items (a type-neutral base that keeps stack-neutral macros from
+    // underfloating in isolation). When `compileWithUnlockingScript` supplies
+    // unlocking items, those REPLACE the integers entirely — they model exactly
+    // what the unlocking script left on the stack (e.g. <sig> <pubkey> <data...>
+    // for PELS), which is the real Bitcoin execution model.
     const pre_populated: u16 = 4;
-    for (0..pre_populated) |_| {
-        try engine.main_stack.push(allocator, .{ .type = StackType.integer });
+    if (extra_stack_items.len > 0) {
+        try engine.prependStackItems(extra_stack_items);
+    } else {
+        for (0..pre_populated) |_| {
+            try engine.main_stack.push(allocator, .{ .type = StackType.integer });
+        }
     }
+    const base_stack_count: u16 = if (extra_stack_items.len > 0) @intCast(extra_stack_items.len) else pre_populated;
 
     const sim_report = engine.simulateWithDiagnostics(bytecode, options.effectiveLimits().stack, diagnostics) catch |e| {
         allocator.free(bytecode);
@@ -222,19 +251,19 @@ fn compileInternal(
      hasher.update(std.mem.asBytes(&options));
      hasher.final(&hash);
 
-     return .{
-         .bytecode = bytecode,
-         .asm_text = asm_text,
-         .hash = hash,
-         .opcode_count = countOpcodes(bytecode),
-         .byte_length = @intCast(bytecode.len),
-          .max_stack_height = if (sim_report.max_stack_height > pre_populated)
-             sim_report.max_stack_height - pre_populated
+    return .{
+        .bytecode = bytecode,
+        .asm_text = asm_text,
+        .hash = hash,
+        .opcode_count = countOpcodes(bytecode),
+        .byte_length = @intCast(bytecode.len),
+         .max_stack_height = if (sim_report.max_stack_height > base_stack_count)
+            sim_report.max_stack_height - base_stack_count
          else
-             0,
-          .is_standard = is_standard,
-     };
- }
+            0,
+         .is_standard = is_standard,
+    };
+}
 
 pub fn compileComptime(
     comptime source: []const u8,
