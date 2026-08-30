@@ -11,18 +11,6 @@ pub fn build(b: *std.Build) void {
     });
     const bsvz_mod = bsvz_dep.module("bsvz");
 
-    // zig-wallet-toolbox dependency (does NOT expose a module, create manually)
-    const wallet_dep = b.dependency("zig_wallet_toolbox", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const wallet_mod = b.createModule(.{
-        .root_source_file = wallet_dep.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    wallet_mod.addImport("bsvz", bsvz_mod);
-
     // Main library module
     const macro_mod = b.addModule("bsvz-macro", .{
         .root_source_file = b.path("src/lib.zig"),
@@ -30,7 +18,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     macro_mod.addImport("bsvz", bsvz_mod);
-    macro_mod.addImport("zig-wallet-toolbox", wallet_mod);
 
     // Static library artifact
     const lib_module = b.createModule(.{
@@ -39,7 +26,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     lib_module.addImport("bsvz", bsvz_mod);
-    lib_module.addImport("zig-wallet-toolbox", wallet_mod);
     const lib = b.addLibrary(.{
         .name = "bsvz-macro",
         .root_module = lib_module,
@@ -47,10 +33,8 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
-    // WASM artifact for the web. The module graph intentionally excludes
-    // zig-wallet-toolbox (never imported by the macro compiler); only bsvz
-    // is imported. Built as a no-entry executable so the module owns its
-    // memory (no env imports, browser-friendly).
+    // WASM artifact for the web. Built as a no-entry executable so the
+    // module owns its memory (no env imports, browser-friendly).
     const wasm_step = b.step("wasm", "Build the wasm32 module for web usage");
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
@@ -294,4 +278,32 @@ pub fn build(b: *std.Build) void {
     });
     const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
     test_step.dependOn(&run_script_engine_tests.step);
+
+    // Diagnostics tests
+    const diagnostics_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/diagnostics_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    diagnostics_test_module.addImport("bsvz-macro", macro_mod);
+    diagnostics_test_module.addImport("bsvz", bsvz_mod);
+    const diagnostics_tests = b.addTest(.{
+        .root_module = diagnostics_test_module,
+    });
+    const run_diagnostics_tests = b.addRunArtifact(diagnostics_tests);
+    test_step.dependOn(&run_diagnostics_tests.step);
+
+    // User-defined macros tests
+    const user_macros_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/user_macros_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    user_macros_test_module.addImport("bsvz-macro", macro_mod);
+    user_macros_test_module.addImport("bsvz", bsvz_mod);
+    const user_macros_tests = b.addTest(.{
+        .root_module = user_macros_test_module,
+    });
+    const run_user_macros_tests = b.addRunArtifact(user_macros_tests);
+    test_step.dependOn(&run_user_macros_tests.step);
 }

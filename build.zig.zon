@@ -8,10 +8,6 @@
             .url = "https://github.com/samooth/bsvz/archive/1712e38e0eb1a215f215ca59364340b28c854e05.tar.gz",
             .hash = "bsvz-0.1.0-wvsL-dviFQDU2Al1QQBlT1s8lDJPmNDXLWdg1-1Q4fBw",
         },
-        .zig_wallet_toolbox = .{
-            .url = "https://github.com/samooth/zig-wallet-toolbox/archive/7d502d4c275cb7c8db296dd341c12e81ccc65283.tar.gz",
-            .hash = "zig_wallet_toolbox-0.1.0-yWfVoisBBQB8hkGbRTel7xNPkQLuy0r3L_yBK4iVk1l-",
-        },
     },
 .overrides = .{},
     .paths = .{
