@@ -242,6 +242,7 @@ pub fn build(b: *std.Build) void {
          .root_source_file = b.path("tests/benchmark_tests.zig"),
          .target = target,
          .optimize = optimize,
+         .link_libc = true,
      });
      bench_test_module.addImport("bsvz-macro", macro_mod);
      bench_test_module.addImport("bsvz", bsvz_mod);

@@ -661,3 +661,45 @@ test "property: mutation fuzz — mutated valid sources compile cleanly" {
         } else |_| {}
     }
 }
+
+test "property: LOOP fast path matches slow path for iterator-free bodies" {
+    // Bodies that never reference <i> must compile to identical bytecode whether
+    // the fast path (expand once, repeat) or the slow path (per-iteration clone)
+    // is taken. Compare LOOP[n]{body} against n copies of the bare body bytes.
+    // Only stack-neutral / stack-growing bodies are used (see AGENTS.md loop
+    // pitfall): net-negative macros underflow the pre-populated 4-item stack.
+    const allocator = testing.allocator;
+    const bodies = [_][]const u8{
+        "OP_DUP OP_DROP",
+        "OP_1",
+        "OP_DUP OP_DROP OP_DUP OP_DROP",
+        "OP_1 OP_DROP",
+    };
+    const bounds = [_]u64{ 1, 2, 3, 5, 10 };
+
+    for (bodies) |body| {
+        const body_result = try bsvz_macro.compile(allocator, body, .{});
+        defer body_result.deinit(allocator);
+
+        for (bounds) |bound| {
+            const loop_source = try std.fmt.allocPrint(allocator, "LOOP[{d}]{{{s}}}", .{ bound, body });
+            defer allocator.free(loop_source);
+
+            const loop_result = try bsvz_macro.compile(allocator, loop_source, .{});
+            defer loop_result.deinit(allocator);
+
+            // The loop bytecode must be exactly `bound` copies of the body bytecode.
+            try testing.expectEqual(body_result.bytecode.len * bound, loop_result.bytecode.len);
+            var i: usize = 0;
+            while (i < bound) : (i += 1) {
+                const start = i * body_result.bytecode.len;
+                const end = start + body_result.bytecode.len;
+                try testing.expectEqualSlices(
+                    u8,
+                    body_result.bytecode,
+                    loop_result.bytecode[start..end],
+                );
+            }
+        }
+    }
+}

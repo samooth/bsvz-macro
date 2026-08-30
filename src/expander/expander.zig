@@ -165,6 +165,21 @@ pub const Expander = struct {
         if (loop.bound == 0) return try allocator.dupe(u8, &.{});
         if (loop.bound > 1000) return ExpandError.LoopBoundTooLarge;
 
+        // Fast path: when the body never references the loop iterator, the
+        // expansion is identical on every iteration. Expand once and repeat the
+        // bytecode instead of cloning + expanding the AST per iteration.
+        if (!bodyReferencesIterator(loop.body, loop.iterator_var)) {
+            const bytes = try self.expand(allocator, loop.body);
+            errdefer allocator.free(bytes);
+            var repeated: std.ArrayListUnmanaged(u8) = .empty;
+            defer repeated.deinit(allocator);
+            for (0..@as(usize, @intCast(loop.bound))) |_| {
+                try repeated.appendSlice(allocator, bytes);
+            }
+            allocator.free(bytes);
+            return repeated.toOwnedSlice(allocator);
+        }
+
         var out: std.ArrayListUnmanaged(u8) = .empty;
         defer out.deinit(allocator);
 
@@ -180,6 +195,41 @@ pub const Expander = struct {
         }
 
         return out.toOwnedSlice(allocator);
+    }
+
+    /// Returns true if any node in `nodes` is an `.iterator_ref` equal to
+    /// `var_name`, recursing into macro args/bodies, nested loop bodies,
+    /// conditional branches, and blocks.
+    fn bodyReferencesIterator(nodes: []const AstNode, var_name: []const u8) bool {
+        for (nodes) |node| {
+            if (nodeReferencesIterator(node, var_name)) return true;
+        }
+        return false;
+    }
+
+    fn nodeReferencesIterator(node: AstNode, var_name: []const u8) bool {
+        switch (node) {
+            .iterator_ref => |r| return std.mem.eql(u8, r, var_name),
+            .macro_invocation => |m| {
+                if (bodyReferencesIterator(m.args, var_name)) return true;
+                if (m.body) |b| if (bodyReferencesIterator(b, var_name)) return true;
+                return false;
+            },
+            .loop_block => |l| {
+                // A nested loop shadowing var_name does not count as a reference
+                // to the outer var, but substituteIterator does not implement
+                // shadowing, so conservatively treat any same-named reference as
+                // a use. Nested bodies are still scanned for other references.
+                return bodyReferencesIterator(l.body, var_name);
+            },
+            .conditional => |c| {
+                if (bodyReferencesIterator(c.then_branch, var_name)) return true;
+                if (c.else_branch) |eb| if (bodyReferencesIterator(eb, var_name)) return true;
+                return false;
+            },
+            .block => |b| return bodyReferencesIterator(b, var_name),
+            else => return false,
+        }
     }
 
     fn expandConditional(self: *Expander, allocator: std.mem.Allocator, cond: @TypeOf(@as(AstNode, undefined).conditional)) ExpandError![]const u8 {

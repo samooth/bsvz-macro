@@ -129,35 +129,27 @@ fn compileInternal(
     diagnostics: ?*DiagnosticList,
     custom_table: ?*@import("expander/table.zig").MacroTable,
 ) MacroError!MacroExpansion {
+    // Scratch arena: backs all lexer tokens, the parser AST, and the per-
+    // statement source locations. These are pure scratch — the returned
+    // MacroExpansion.bytecode is allocated with the normal allocator and
+    // outlives the arena, which is freed in one shot here at the end.
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+
     // Phase 1: Lex
     var scanner = lexer.Scanner.init(source);
     scanner.diagnostics = diagnostics;
-    const tokens = scanner.scanAll(allocator) catch return MacroError.LexError;
-    defer {
-        for (tokens) |t| {
-            switch (t.token) {
-                .macro_name, .iterator_var => |v| allocator.free(v),
-                .string => {},
-                else => {},
-            }
-        }
-        allocator.free(tokens);
-    }
+    const tokens = scanner.scanAll(scratch) catch return MacroError.LexError;
 
     // Phase 2: Parse
-    var p = parser.Parser.init(tokens, allocator);
+    var p = parser.Parser.init(tokens, scratch);
     p.diagnostics = diagnostics;
     p.recover = diagnostics != null;
     var stmt_locs: std.ArrayListUnmanaged(SourceLocation) = .empty;
-    const ast_nodes = p.parseWithLocations(&stmt_locs) catch {
-        stmt_locs.deinit(allocator);
-        return MacroError.ParseError;
-    };
-    defer stmt_locs.deinit(allocator);
-    defer {
-        for (ast_nodes) |node| deinitAstNode(allocator, node);
-        allocator.free(ast_nodes);
-    }
+    const ast_nodes = p.parseWithLocations(&stmt_locs) catch return MacroError.ParseError;
+    // stmt_locs is scratch-backed (the parser appends via self.allocator);
+    // the arena frees it. No per-token or per-node cleanup required.
 
     // Phase 3: Setup macro table
     var table: MacroTable = undefined;
@@ -324,10 +316,6 @@ pub fn fromAsm(allocator: std.mem.Allocator, asm_source: []const u8) MacroError!
         error.InvalidOpcode, error.InvalidHex, error.InvalidPushData => return MacroError.ParseError,
         else => return MacroError.OutOfMemory,
     };
-}
-
-fn deinitAstNode(allocator: std.mem.Allocator, node: AstNode) void {
-    ast_mod.deinit(allocator, node);
 }
 
 test {
