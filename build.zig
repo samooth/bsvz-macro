@@ -60,6 +60,31 @@ pub fn build(b: *std.Build) void {
     });
     wasm_step.dependOn(&wasm_install.step);
 
+    // CLI executable: a native binary that compiles a source file (or stdin)
+    // with the full set of CompileOptions. Build with `zig build`, run with
+    // `zig build run -- <args>` or invoke the installed binary directly.
+    // cli.zig gets ALL option types via the bsvz-macro module (lib.zig
+    // re-exports Target, Era, Network, FeatureSet, StandardnessFlags, LimitSet,
+    // LimitKind, and CompileOptions), so we do NOT create a separate
+    // options.zig module — doing so double-claims src/options.zig because
+    // src/lib.zig already imports it as a file.
+    const cli_module = b.createModule(.{
+        .root_source_file = b.path("src/cli.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cli_module.addImport("bsvz-macro", macro_mod);
+    cli_module.addImport("bsvz", bsvz_mod);
+    const cli = b.addExecutable(.{
+        .name = "bsvz-macro",
+        .root_module = cli_module,
+    });
+    const run_cli = b.step("run", "Run the CLI (usage: zig build run -- <args>)");
+    const run_cli_cmd = b.addRunArtifact(cli);
+    run_cli_cmd.addArg("--");
+    run_cli.dependOn(&run_cli_cmd.step);
+    b.installArtifact(cli);
+
 // Tests
      const test_step = b.step("test", "Run all tests");
 
