@@ -3,6 +3,8 @@ const Opcode = @import("bsvz").script.opcode.Opcode;
 const Token = @import("token.zig").Token;
 const TokenWithLoc = @import("token.zig").TokenWithLoc;
 const LexError = @import("error.zig").LexError;
+const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
+const SourceLocation = @import("../diagnostics.zig").SourceLocation;
 
 pub const Scanner = struct {
     source: []const u8,
@@ -10,6 +12,7 @@ pub const Scanner = struct {
     line: u32 = 1,
     column: u32 = 1,
     in_loop_body: bool = false,
+    diagnostics: ?*DiagnosticList = null,
 
     pub fn init(source: []const u8) Scanner {
         return .{ .source = source };
@@ -20,12 +23,26 @@ pub const Scanner = struct {
         defer tokens.deinit(allocator);
 
         while (true) {
-            const tok = try self.nextToken(allocator);
+            const tok = self.nextToken(allocator) catch |e| {
+                self.reportLexError(e);
+                return e;
+            };
             try tokens.append(allocator, tok);
             if (tok.token == .eof) break;
         }
 
         return tokens.toOwnedSlice(allocator);
+    }
+
+    fn reportLexError(self: *Scanner, err: anyerror) void {
+        const diags = self.diagnostics orelse return;
+        const location: SourceLocation = .{
+            .line = self.line,
+            .column = self.column,
+            .offset = @intCast(self.pos),
+            .length = 1,
+        };
+        diags.append(.lex, .@"error", "lex error: {s}", location, .{@errorName(err)});
     }
 
     fn nextToken(self: *Scanner, allocator: std.mem.Allocator) LexError!TokenWithLoc {

@@ -132,7 +132,7 @@ const exec_result = try engine.execute(script);
 const bsvz_macro = @import("bsvz-macro");
 
 // Add a macro-generated output to a transaction
-var builder = bsvz.transaction.builder.Builder.init(allocator);
+var builder = bsvz.transaction.Builder.init(allocator);
 try bsvz_macro.bridge.wallet.addMacroOutput(
     &builder,
     "OP_HASH160 0x0000...0000 OP_EQUALVERIFY OP_CHECKSIG",
@@ -181,9 +181,13 @@ Source DSL
 | `VERIFY_ANY[n]` | 1 | `[b1...bn]` → `[]` | `BOOLOR...VERIFY` |
 | `PUSHTX_FRAGMENT[n]` | 1 | `[..., xn]` → `[..., xn, xn \|\| HASH256(xn)]` | `PICK DUP HASH256 CAT` |
 | `PUSHTX_TOCANONICAL` | 0 | `[s]` → `[s' ∈ [0, n/2]]` | `DUP n/2 GT IF n SWAP SUB ENDIF` |
+| `PUSHTX_TOCANONICAL_FAST` | 0 | `[s]` → `[s' ∈ [0, n/2]]` | `DUP n/2 GT IF n SWAP SUB ENDIF` (byte-identical; `n` literal) |
 | `PUSHTX_CONCATENATIONS` | 0 | `[r, s]` → `[DER(r,s)]` | `SIZE DUP 0x24 ADD 0x30 SWAP CAT 0x0220\|\|Gx\|\|02 CAT SWAP CAT SWAP CAT` |
+| `PUSHTX_CONCATENATIONS_FAST` | 0 | `[r, s]` → `[DER(r,s)]` | same, but `0x0220\|\|Gx\|\|02` is built from `Gx` on the alt stack |
 | `PUSHTX_TODER` | 0 | `[r, s]` → `[DER(r,s)]` | `PUSHTX_TOCANONICAL PUSHTX_CONCATENATIONS` |
+| `PUSHTX_TODER_FAST` | 0 | `[r, s]` → `[DER(r,s)]` | `PUSHTX_TOCANONICAL_FAST` + reverse + `PUSHTX_CONCATENATIONS_FAST` |
 | `PUSHTX_SIGN[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx ADD n MOD PUSHTX_TODER <sighash> CAT Gcomp CAT` |
+| `PUSHTX_SIGN_FAST[sighash]` | 1 | `[z]` → `[sig\|\|sighash\|\|Gcomp]` | `HASH256 Gx DUP TOALTSTACK ADD n MOD PUSHTX_TODER_FAST <sighash> CAT Gcomp CAT` (byte-identical to `PUSHTX_SIGN`) |
 | `PUSHTX_OUTPUTS_REQUEST[item8, items10_11]` | 2 | `[..., H, F]` → `[..., F, H, HASH256(H), ...]` | `2DUP HASH256 SWAP <item8> CAT SWAP CAT <items10_11> CAT` |
 | `PUSHTX_SIGN_BIT_SHIFT[security, sighash]` | 2 | `[..., z]` → `[..., z, <sig>]` | `push security OP_RSHIFT push <prefix‖R‖0x0220> SWAP CAT push sighash CAT push P CHECKSIG` |
 | `PELS_LOCKING_SCRIPT[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script) | `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |

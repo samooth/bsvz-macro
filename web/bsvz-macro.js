@@ -10,14 +10,18 @@ const ERROR_NAMES = {
 };
 
 export class CompileError extends Error {
-  constructor(code) {
+  constructor(code, diagnostics = []) {
     const name = ERROR_NAMES[code] ?? `UnknownError(${code})`;
     super(`bsvz-macro: ${name}`);
     this.name = "CompileError";
     this.code = code;
     this.errorName = name;
+    this.diagnostics = diagnostics;
   }
 }
+
+const PHASES = ["lex", "parse", "expand", "simulate", "validate"];
+const SEVERITIES = ["error", "warning", "note"];
 
 export const Target = Object.freeze({
   bsv_mainnet: 0,
@@ -101,8 +105,9 @@ export class BsvzMacro {
       o.emitAsm ? 1 : 0,
     );
     if (status !== 0) {
+      const diagnostics = this.#readDiagnostics();
       this.#e.bsvz_free();
-      throw new CompileError(status);
+      throw new CompileError(status, diagnostics);
     }
 
     const mem = new Uint8Array(this.#memory.buffer);
@@ -128,10 +133,34 @@ export class BsvzMacro {
       byteLength: this.#e.bsvz_byte_length(),
       maxStackHeight: this.#e.bsvz_max_stack_height(),
       isStandard: this.#e.bsvz_is_standard() === 1,
+      diagnostics: this.#readDiagnostics(),
     };
 
     this.#e.bsvz_free();
     return result;
+  }
+
+  #readDiagnostics() {
+    const count = this.#e.bsvz_diag_count();
+    const out = [];
+    const mem = new Uint8Array(this.#memory.buffer);
+    const decoder = new TextDecoder();
+    for (let i = 0; i < count; i++) {
+      const mptr = this.#e.bsvz_diag_message_ptr(i);
+      if (mptr === 0) continue;
+      const mlen = this.#e.bsvz_diag_message_len(i);
+      const phaseIdx = this.#e.bsvz_diag_phase(i) - 1;
+      const sevIdx = this.#e.bsvz_diag_severity(i) - 1;
+      out.push({
+        phase: PHASES[phaseIdx] ?? `phase(${phaseIdx + 1})`,
+        severity: SEVERITIES[sevIdx] ?? `severity(${sevIdx + 1})`,
+        line: this.#e.bsvz_diag_line(i),
+        column: this.#e.bsvz_diag_column(i),
+        offset: this.#e.bsvz_diag_offset(i),
+        message: decoder.decode(mem.slice(mptr, mptr + mlen)),
+      });
+    }
+    return out;
   }
 
   free() {

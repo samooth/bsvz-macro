@@ -752,35 +752,35 @@ pub const xswap3_case = MacroTestCase{
 ## 9. Roadmap de Implementacion
 
 ### Fase 1: Foundation (Semana 1-2)
-- [ ] Estructura de modulos y `build.zig`
-- [ ] Definicion de tipos base (`Token`, `AstNode`, `MacroTable`)
-- [ ] Lexer completo con todas las reglas de tokenizacion
-- [ ] Parser recursive descent para gramatica base
-- [ ] Encoder minimal push (OP_0..OP_16, PUSHDATA1..4)
+- [x] Estructura de modulos y `build.zig`
+- [x] Definicion de tipos base (`Token`, `AstNode`, `MacroTable`)
+- [x] Lexer completo con todas las reglas de tokenizacion
+- [x] Parser recursive descent para gramatica base
+- [x] Encoder minimal push (OP_0..OP_16, PUSHDATA1..4)
 - [ ] 100% cobertura de test para lexer + parser + encoder
 
 ### Fase 2: Expander Core (Semana 3-4)
-- [ ] MacroTable con familia canonica: XSWAP, XDROP, XROT, HASHCAT
-- [ ] Single-pass expander con single allocator
-- [ ] LOOP[n]{body} con substitute_iterator
-- [ ] Feature flags (@bsv, @chronicle, @btc_strict)
-- [ ] Tests de integracion expander -> hex
+- [x] MacroTable con familia canonica: XSWAP, XDROP, XROT, HASHCAT
+- [x] Single-pass expander con single allocator
+- [x] LOOP[n]{body} con substitute_iterator
+- [x] Feature flags (@bsv, @chronicle, @btc_strict)
+- [x] Tests de integracion expander -> hex
 
 ### Fase 3: Stack Simulator (Semana 5-6)
-- [ ] Modelo simbolico de stack (main + alt)
-- [ ] Firma de tipo para cada opcode legacy (~100 opcodes)
-- [ ] Ejecutor simbolico paso a paso
-- [ ] Deteccion de StackUnderflow, TypeMismatch, PushTooLarge
-- [ ] Tests contra bsvz ScriptEngine (deben coincidir 100%)
+- [x] Modelo simbolico de stack (main + alt)
+- [x] Firma de tipo para cada opcode legacy (~100 opcodes)
+- [x] Ejecutor simbolico paso a paso
+- [x] Deteccion de StackUnderflow, TypeMismatch, PushTooLarge
+- [x] Tests contra bsvz ScriptEngine (deben coincidir 100%)
 
 ### Fase 4: Validator + Policy (Semana 7)
-- [ ] Bounds checker (size, stack, push)
-- [ ] Policy checker (standardness rules)
+- [x] Bounds checker (size, stack, push)
+- [x] Policy checker (standardness rules)
 - [ ] Chronicle support (32MB numbers, nuevos opcodes)
-- [ ] Error reporting con ubicacion exacta (linea:columna)
+- [ ] Error reporting con ubicacion exacta (linea:columna) — en progreso
 
 ### Fase 5: Comptime Bridge (Semana 8)
-- [ ] `compileComptime()` usando `comptime` de Zig
+- [x] `compileComptime()` usando `comptime` de Zig
 - [ ] Macros definidos como funciones `comptime` en `prelude.zig`
 - [ ] Integracion con `std.testing` para tests comptime
 - [ ] Benchmark: comptime vs runtime expansion

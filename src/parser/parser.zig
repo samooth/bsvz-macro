@@ -5,11 +5,20 @@ const AstNode = @import("ast.zig").AstNode;
 const Condition = @import("ast.zig").Condition;
 const FeatureFlag = @import("ast.zig").FeatureFlag;
 const ParseError = @import("error.zig").ParseError;
+const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
+const SourceLocation = @import("../diagnostics.zig").SourceLocation;
 
 pub const Parser = struct {
     tokens: []const TokenWithLoc,
     pos: usize = 0,
     allocator: std.mem.Allocator,
+    diagnostics: ?*DiagnosticList = null,
+    recovery_depth: u32 = 0,
+    /// When true, parse errors are recorded as diagnostics and parsing
+    /// continues at the next statement boundary to accumulate more errors
+    /// before failing with the first error seen. When false, the first
+    /// error propagates immediately (fail-fast).
+    recover: bool = false,
 
     pub fn init(tokens: []const TokenWithLoc, allocator: std.mem.Allocator) Parser {
         return .{
@@ -23,7 +32,12 @@ pub const Parser = struct {
         defer statements.deinit(self.allocator);
 
         while (!self.isAtEnd()) {
-            const stmt = try self.parseStatement();
+            const stmt = self.parseStatement() catch |e| {
+                if (!self.recover) return e;
+                self.report(e, self.locAtCurrent());
+                if (!self.recoverToStatementBoundary()) return e;
+                continue;
+            };
             try statements.append(self.allocator, stmt);
 
             // Optional semicolon between statements
@@ -33,6 +47,78 @@ pub const Parser = struct {
         }
 
         return statements.toOwnedSlice(self.allocator);
+    }
+
+    /// Parse and also return per-statement source locations (parallel to the
+    /// returned slice, one entry per successfully parsed statement).
+    /// With `recover` enabled, all parse errors are accumulated into
+    /// `diagnostics` before failing with the first error seen.
+    pub fn parseWithLocations(self: *Parser, out_locs: *std.ArrayListUnmanaged(SourceLocation)) ParseError![]const AstNode {
+        var statements: std.ArrayList(AstNode) = .empty;
+        defer statements.deinit(self.allocator);
+
+        var first_error: ?ParseError = null;
+
+        while (!self.isAtEnd()) {
+            const stmt_start = self.locAtCurrent();
+            const stmt = self.parseStatement() catch |e| {
+                if (!self.recover) return e;
+                if (first_error == null) first_error = e;
+                self.report(e, self.locAtCurrent());
+                if (!self.recoverToStatementBoundary()) return first_error.?;
+                continue;
+            };
+            try statements.append(self.allocator, stmt);
+            try out_locs.append(self.allocator, stmt_start);
+
+            if (self.match(.semicolon)) {
+                continue;
+            }
+        }
+
+        if (first_error != null) return first_error.?;
+        return statements.toOwnedSlice(self.allocator);
+    }
+
+    fn report(self: *Parser, err: anyerror, location: SourceLocation) void {
+        const diags = self.diagnostics orelse return;
+        diags.append(.parse, .@"error", "parse error: {s}", location, .{@errorName(err)});
+    }
+
+    fn locAtCurrent(self: *Parser) SourceLocation {
+        if (self.pos < self.tokens.len) {
+            const t = self.tokens[self.pos];
+            return .{ .line = t.line, .column = t.column, .offset = t.offset, .length = t.length };
+        }
+        return .{ .line = 0, .column = 0, .offset = 0, .length = 0 };
+    }
+
+    fn recoverToStatementBoundary(self: *Parser) bool {
+        if (self.recovery_depth >= 16) return false;
+        self.recovery_depth += 1;
+        defer self.recovery_depth -= 1;
+
+        // Skip tokens until a plausible statement start after a ';' or '}'.
+        var depth: i32 = 0;
+        while (!self.isAtEnd()) {
+            const tag = std.meta.activeTag(self.peek().token);
+            if (depth == 0) {
+                if (tag == .semicolon) {
+                    _ = self.advance();
+                    return true;
+                }
+                if (tag == .r_brace) {
+                    // Consume the closing brace so the caller does not
+                    // immediately fail on it again.
+                    _ = self.advance();
+                    return true;
+                }
+            }
+            if (tag == .l_brace) depth += 1;
+            if (tag == .r_brace) depth -= 1;
+            _ = self.advance();
+        }
+        return false;
     }
 
     fn parseStatement(self: *Parser) ParseError!AstNode {

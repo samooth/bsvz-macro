@@ -79,3 +79,28 @@ test "script_engine: bsvz ScriptEngine can run a simple push script" {
     defer allocator.free(result);
     try testing.expectEqualSlices(u8, &z_bytes, result);
 }
+
+test "script_engine: PUSHTX_SIGN_FAST matches PUSHTX_SIGN byte-for-byte" {
+    const allocator = testing.allocator;
+    // Three fixed preimages. Chosen so at least one exercises the
+    // canonical-form branch (s > n/2).
+    const preimages = [_][]const u8{
+        &[_]u8{0x00} ** 32,
+        &[_]u8{0xff} ** 32,
+        &[_]u8{0x7f} ** 32,
+    };
+
+    for (preimages) |preimage| {
+        const slow = try bsvz_macro.compile(allocator, "PUSHTX_SIGN[1]", .{});
+        defer slow.deinit(allocator);
+        const fast = try bsvz_macro.compile(allocator, "PUSHTX_SIGN_FAST[1]", .{});
+        defer fast.deinit(allocator);
+
+        const slow_sig = try runSignatureScript(allocator, slow.bytecode, preimage);
+        defer allocator.free(slow_sig);
+        const fast_sig = try runSignatureScript(allocator, fast.bytecode, preimage);
+        defer allocator.free(fast_sig);
+
+        try testing.expectEqualSlices(u8, slow_sig, fast_sig);
+    }
+}

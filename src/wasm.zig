@@ -4,6 +4,7 @@ const macro = @import("bsvz-macro");
 const alloc = std.heap.wasm_allocator;
 
 const max_source_bytes: usize = 1 << 20;
+const max_diagnostics: usize = 64;
 
 pub const Status = enum(i32) {
     ok = 0,
@@ -20,6 +21,23 @@ pub const Status = enum(i32) {
 var last_result: ?macro.MacroExpansion = null;
 var src_buf: ?[]u8 = null;
 var last_status: Status = .ok;
+var diag_list: macro.DiagnosticList = undefined;
+var diag_initialized = false;
+
+fn ensureDiagList() *macro.DiagnosticList {
+    if (!diag_initialized) {
+        diag_list = macro.DiagnosticList.init(alloc);
+        diag_initialized = true;
+    }
+    return &diag_list;
+}
+
+fn resetDiagnostics() void {
+    if (diag_initialized) {
+        diag_list.deinit();
+        diag_list = macro.DiagnosticList.init(alloc);
+    }
+}
 
 fn releaseResult() void {
     if (last_result) |*r| {
@@ -81,7 +99,8 @@ export fn bsvz_compile(
     };
 
     releaseResult();
-    const result = macro.compile(alloc, src_buf.?, options) catch |e| {
+    resetDiagnostics();
+    const result = macro.compileWithDiagnostics(alloc, src_buf.?, options, ensureDiagList()) catch |e| {
         last_status = switch (e) {
             error.LexError => .lex_error,
             error.ParseError => .parse_error,
@@ -148,7 +167,57 @@ export fn bsvz_last_error() i32 {
     return @intFromEnum(last_status);
 }
 
+export fn bsvz_diag_count() usize {
+    if (!diag_initialized) return 0;
+    return @min(diag_list.len(), max_diagnostics);
+}
+
+export fn bsvz_diag_phase(index: usize) u32 {
+    const d = getDiag(index) orelse return 0;
+    return @intFromEnum(d.phase) + 1;
+}
+
+export fn bsvz_diag_severity(index: usize) u32 {
+    const d = getDiag(index) orelse return 0;
+    return @intFromEnum(d.severity) + 1;
+}
+
+export fn bsvz_diag_line(index: usize) u32 {
+    const d = getDiag(index) orelse return 0;
+    return d.location.line;
+}
+
+export fn bsvz_diag_column(index: usize) u32 {
+    const d = getDiag(index) orelse return 0;
+    return d.location.column;
+}
+
+export fn bsvz_diag_offset(index: usize) u32 {
+    const d = getDiag(index) orelse return 0;
+    return d.location.offset;
+}
+
+export fn bsvz_diag_message_ptr(index: usize) ?[*]const u8 {
+    const d = getDiag(index) orelse return null;
+    return d.message.ptr;
+}
+
+export fn bsvz_diag_message_len(index: usize) usize {
+    const d = getDiag(index) orelse return 0;
+    return d.message.len;
+}
+
+fn getDiag(index: usize) ?macro.CompileDiagnostic {
+    if (!diag_initialized) return null;
+    if (index >= max_diagnostics) return null;
+    return diag_list.get(index);
+}
+
 export fn bsvz_free() void {
     releaseResult();
     releaseSource();
+    if (diag_initialized) {
+        diag_list.deinit();
+        diag_initialized = false;
+    }
 }

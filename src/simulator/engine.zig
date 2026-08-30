@@ -4,6 +4,7 @@ const StackType = @import("stack.zig").StackType;
 const StackItem = @import("stack.zig").StackItem;
 const SymbolicStack = @import("stack.zig").SymbolicStack;
 const SimError = @import("error.zig").SimError;
+const DiagnosticList = @import("../diagnostics.zig").DiagnosticList;
 
 pub const SimulationReport = struct {
     max_stack_height: u16,
@@ -77,13 +78,27 @@ pub const SymbolicEngine = struct {
     }
 
     pub fn simulate(self: *SymbolicEngine, bytecode: []const u8, max_stack: u16) SimError!SimulationReport {
+        return self.simulateWithDiagnostics(bytecode, max_stack, null);
+    }
+
+    pub fn simulateWithDiagnostics(self: *SymbolicEngine, bytecode: []const u8, max_stack: u16, diagnostics: ?*DiagnosticList) SimError!SimulationReport {
         var pc: u32 = 0;
         while (pc < bytecode.len) {
             const op_byte = bytecode[pc];
             const op = Opcode.fromByte(op_byte);
 
             const pre_height = self.main_stack.height();
-            try self.executeOpcode(op, bytecode, &pc, max_stack);
+            self.executeOpcode(op, bytecode, &pc, max_stack) catch |e| {
+                if (diagnostics) |diags| {
+                    diags.append(.simulate, .@"error", "simulation error: {s} at opcode {s} (byte offset {d})", .{
+                        .line = 1,
+                        .column = pc + 1,
+                        .offset = pc,
+                        .length = 1,
+                    }, .{ @errorName(e), op.name(), pc });
+                }
+                return e;
+            };
             const post_height = self.main_stack.height();
 
             try self.transitions.append(self.allocator, .{

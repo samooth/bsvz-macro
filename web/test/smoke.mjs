@@ -57,6 +57,26 @@ const m = await load(readFileSync(wasmPath));
   }
   check("LOOP[100]{OP_HASHCAT} throws", threw !== null);
   check("error name is SimError", threw?.errorName === "SimError", threw?.errorName);
+  check("sim error has diagnostic with offset", (() => {
+    const d = threw?.diagnostics?.[0];
+    return d?.phase === "simulate" && d?.offset > 0;
+  })());
+}
+
+{
+  let threw = null;
+  try {
+    m.compile("OP_DUP UNDEFINED_MACRO OP_DROP");
+  } catch (e) {
+    threw = e;
+  }
+  check("undefined macro throws", threw !== null);
+  check("error name is ExpandError", threw?.errorName === "ExpandError", threw?.errorName);
+  check("expand error has located diagnostic", (() => {
+    const d = threw?.diagnostics?.[0];
+    return d?.phase === "expand" && d?.line === 1 && d?.column === 8 &&
+      typeof d?.message === "string" && d.message.length > 0;
+  })());
 }
 
 {

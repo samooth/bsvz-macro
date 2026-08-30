@@ -45,6 +45,12 @@ pub const MacroTable = struct {
         name: []const u8,
         definition: MacroDefinition,
     ) !void {
+        // If a macro with this name is already registered, free its old
+        // name and param_types before installing the new one.
+        if (self.entries.fetchRemove(name)) |old| {
+            self.allocator.free(old.key);
+            self.allocator.free(old.value.param_types);
+        }
         const owned_name = try self.allocator.dupe(u8, name);
         errdefer self.allocator.free(owned_name);
         const owned_types = try self.allocator.dupe(ParamType, definition.param_types);

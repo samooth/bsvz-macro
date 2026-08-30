@@ -9,7 +9,11 @@ pub const cases = &[_]LoopCase{
         .expected_opcodes = 6,
     },
     .{
-        .source = "LOOP[5]{ OP_<i> OP_ADD }",
+        .source = "LOOP[5]{ <i> OP_ADD }",
         .expected_opcodes = 10,
+    },
+    .{
+        .source = "LOOP[4]{ OP_HASHCAT }",
+        .expected_opcodes = 16,
     },
 };

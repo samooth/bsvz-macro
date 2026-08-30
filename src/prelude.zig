@@ -348,12 +348,12 @@ fn pushTxConcatenationsExpand(allocator: std.mem.Allocator, args: []const AstNod
     emitMinimalPushInt(&out, allocator, 0x30) catch return ExpandError.TypeMismatch;
     try emitOpcode(&out, allocator, .OP_SWAP);
     try emitOpcode(&out, allocator, .OP_CAT);
-    // push 0x02 0x20 || Gx || 0x02 (34 bytes)
-    var gx_tagged: [34]u8 = undefined;
+    // push 0x02 0x20 || Gx || 0x02 (35 bytes)
+    var gx_tagged: [35]u8 = undefined;
     gx_tagged[0] = 0x02;
     gx_tagged[1] = 0x20;
     @memcpy(gx_tagged[2..34], &SECP256K1_GX);
-    gx_tagged[33] = 0x02;
+    gx_tagged[34] = 0x02;
     try emitPushBytes(&out, allocator, &gx_tagged);
     try emitOpcode(&out, allocator, .OP_CAT);
     try emitOpcode(&out, allocator, .OP_SWAP);
@@ -438,12 +438,116 @@ fn pushTxSignExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?
     return out.toOwnedSlice(allocator);
 }
 
-// Alt-stack optimized variants per WP1605 §1.4.
-// White paper errata: the published sequence has [sign] pushing Gx first
-// (so Gx is on top of the alt stack) and [toCanonical] then comparing s
-// with Gx/2 instead of n/2. The corrected sequence pushes n first, so
-// n is on top of the alt stack; [toCanonical] pops n, computes n/2, and
-// replaces s with n - s when s > n/2 (matching the original semantics).
+// Alt-stack optimized variants per WP1605 §1.4 (white paper errata corrected).
+//
+// The white paper's published [toCanonical] pushes Gx first and compares s with
+// Gx/2 (wrong). The corrected [toCanonical] compares s with n/2 and replaces s
+// with n - s when s > n/2. To stay byte-identical to the non-alt-stack
+// PUSHTX_SIGN family AND keep the symbolic simulator (which executes both
+// conditional branches linearly) from underflowing the alt stack, the curve
+// order n is pushed literally in [toCanonical_FAST] exactly as in [toCanonical];
+// only Gx is sourced from the alt stack in [concatenations_FAST], avoiding the
+// 35-byte literal re-push while preserving identical signature output.
+
+fn pushTxTocanonicalFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 0) return ExpandError.ArityMismatch;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    // [toCanonical_FAST]: identical main-stack effect to [toCanonical]; n is
+    // pushed literally (the alt stack is reserved for Gx in [concatenations_FAST]
+    // so the linear conditional execution stays simulator-safe).
+    try emitOpcode(&out, allocator, .OP_DUP);
+    try emitPushBytes(&out, allocator, &SECP256K1_N_HALF);
+    try emitOpcode(&out, allocator, .OP_GREATERTHAN);
+    try emitOpcode(&out, allocator, .OP_IF);
+    try emitPushBytes(&out, allocator, &SECP256K1_N);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_SUB);
+    try emitOpcode(&out, allocator, .OP_ENDIF);
+    return out.toOwnedSlice(allocator);
+}
+
+fn pushTxConcatenationsFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 0) return ExpandError.ArityMismatch;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    // [concatenations_FAST]: identical to [concatenations] but the 0x02 0x20 || Gx
+    // || 0x02 tag is assembled inline from the Gx kept on the alt stack instead
+    // of re-pushing a 35-byte literal, leaving the surrounding OP_CAT chain
+    // (and therefore the final DER bytes) byte-identical to [concatenations].
+    try emitOpcode(&out, allocator, .OP_SIZE);
+    try emitOpcode(&out, allocator, .OP_DUP);
+    emitMinimalPushInt(&out, allocator, 0x24) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_ADD);
+    emitMinimalPushInt(&out, allocator, 0x30) catch return ExpandError.TypeMismatch;
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    const tag02_20 = [_]u8{ 0x02, 0x20 };
+    try emitPushBytes(&out, allocator, &tag02_20);
+    try emitOpcode(&out, allocator, .OP_FROMALTSTACK);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    const tag02 = [_]u8{0x02};
+    try emitPushBytes(&out, allocator, &tag02);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    try emitOpcode(&out, allocator, .OP_SWAP);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    return out.toOwnedSlice(allocator);
+}
+
+fn pushTxToderFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    if (args.len != 0) return ExpandError.ArityMismatch;
+    // [toDER_FAST]:= [toCanonical_FAST] [reverseEndianness32] [concatenations_FAST]
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    const canonical = try pushTxTocanonicalFastExpand(allocator, args, null, table);
+    defer allocator.free(canonical);
+    try out.appendSlice(allocator, canonical);
+    const reverse = try reverseEndianness32(allocator);
+    defer allocator.free(reverse);
+    try out.appendSlice(allocator, reverse);
+    const concats = try pushTxConcatenationsFastExpand(allocator, args, null, table);
+    defer allocator.free(concats);
+    try out.appendSlice(allocator, concats);
+    return out.toOwnedSlice(allocator);
+}
+
+fn pushTxSignFastExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    if (args.len != 1) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+    const sighash = args[0].integer_literal;
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    // [sign_FAST]:= OP_HASH256 <Gx> OP_DUP OP_TOALTSTACK OP_ADD <n> OP_MOD
+    //   [toDER_FAST] <sighash> OP_CAT <Gcomp> OP_CAT
+    try emitOpcode(&out, allocator, .OP_HASH256);
+    try emitPushBytes(&out, allocator, &SECP256K1_GX);
+    try emitOpcode(&out, allocator, .OP_DUP);
+    try emitOpcode(&out, allocator, .OP_TOALTSTACK);
+    try emitOpcode(&out, allocator, .OP_ADD);
+    try emitPushBytes(&out, allocator, &SECP256K1_N);
+    try emitOpcode(&out, allocator, .OP_MOD);
+    const toder = try pushTxToderFastExpand(allocator, &.{}, null, table);
+    defer allocator.free(toder);
+    try out.appendSlice(allocator, toder);
+    try emitPushInt32LE(&out, allocator, sighash);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    // Gcompressed = 0x02 || Gx (33 bytes)
+    var gcomp: [33]u8 = undefined;
+    gcomp[0] = 0x02;
+    @memcpy(gcomp[1..33], &SECP256K1_GX);
+    try emitPushBytes(&out, allocator, &gcomp);
+    try emitOpcode(&out, allocator, .OP_CAT);
+    return out.toOwnedSlice(allocator);
+}
 
 fn pushTxOutputsRequestExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
     _ = body; _ = table;
@@ -634,6 +738,10 @@ pub fn registerCanonicalMacros(table: *MacroTable) !void {
     try table.register("PUSHTX_CONCATENATIONS", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxConcatenationsExpand });
     try table.register("PUSHTX_TODER", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxToderExpand });
     try table.register("PUSHTX_SIGN", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = pushTxSignExpand });
+    try table.register("PUSHTX_TOCANONICAL_FAST", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxTocanonicalFastExpand });
+    try table.register("PUSHTX_CONCATENATIONS_FAST", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxConcatenationsFastExpand });
+    try table.register("PUSHTX_TODER_FAST", .{ .arity = 0, .param_types = &.{}, .expand_fn = pushTxToderFastExpand });
+    try table.register("PUSHTX_SIGN_FAST", .{ .arity = 1, .param_types = &.{.integer}, .expand_fn = pushTxSignFastExpand });
     try table.register("PUSHTX_SIGN_BIT_SHIFT", .{ .arity = 2, .param_types = &.{ .integer, .integer }, .expand_fn = pushTxSignBitShiftExpand });
     try table.register("PUSHTX_OUTPUTS_REQUEST", .{ .arity = 2, .param_types = &.{ .string, .string }, .expand_fn = pushTxOutputsRequestExpand });
     try table.register("PELS_LOCKING_SCRIPT", .{ .arity = 4, .param_types = &.{ .integer, .string, .string, .string }, .expand_fn = pelsLockingScriptExpand });

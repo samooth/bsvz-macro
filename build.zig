@@ -278,4 +278,46 @@ pub fn build(b: *std.Build) void {
     });
     const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
     test_step.dependOn(&run_script_engine_tests.step);
+
+    // Diagnostics tests (compileWithDiagnostics + SourceLocation)
+    const diagnostics_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/diagnostics_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    diagnostics_test_module.addImport("bsvz-macro", macro_mod);
+    diagnostics_test_module.addImport("bsvz", bsvz_mod);
+    const diagnostics_tests = b.addTest(.{
+        .root_module = diagnostics_test_module,
+    });
+    const run_diagnostics_tests = b.addRunArtifact(diagnostics_tests);
+    test_step.dependOn(&run_diagnostics_tests.step);
+
+    // User-defined macro tests (MacroTable + registerMacro)
+    const user_macros_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/user_macros_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    user_macros_test_module.addImport("bsvz-macro", macro_mod);
+    user_macros_test_module.addImport("bsvz", bsvz_mod);
+    const user_macros_tests = b.addTest(.{
+        .root_module = user_macros_test_module,
+    });
+    const run_user_macros_tests = b.addRunArtifact(user_macros_tests);
+    test_step.dependOn(&run_user_macros_tests.step);
+
+    // Bridge tests (P2PKH/P2SH/PELS output helpers)
+    const bridge_test_module = b.createModule(.{
+        .root_source_file = b.path("tests/bridge_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bridge_test_module.addImport("bsvz-macro", macro_mod);
+    bridge_test_module.addImport("bsvz", bsvz_mod);
+    const bridge_tests = b.addTest(.{
+        .root_module = bridge_test_module,
+    });
+    const run_bridge_tests = b.addRunArtifact(bridge_tests);
+    test_step.dependOn(&run_bridge_tests.step);
 }

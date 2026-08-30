@@ -1,5 +1,18 @@
 export type Target = "bsv_mainnet" | "bsv_testnet" | "btc_strict";
 
+export type DiagnosticPhase = "lex" | "parse" | "expand" | "simulate" | "validate";
+
+export type DiagnosticSeverity = "error" | "warning" | "note";
+
+export interface Diagnostic {
+  phase: DiagnosticPhase | string;
+  severity: DiagnosticSeverity | string;
+  line: number;
+  column: number;
+  offset: number;
+  message: string;
+}
+
 export interface CompileOptions {
   target?: Target;
   enforceStandardness?: boolean;
@@ -22,6 +35,18 @@ export type MacroErrorName =
 export class CompileError extends Error {
   code: number;
   errorName: MacroErrorName;
+  diagnostics: Diagnostic[];
+}
+
+export interface MacroExpansion {
+  bytecode: Uint8Array;
+  asmText: string | null;
+  hash: Uint8Array;
+  opcodeCount: number;
+  byteLength: number;
+  maxStackHeight: number;
+  isStandard: boolean;
+  diagnostics: Diagnostic[];
 }
 
 export interface MacroExpansion {

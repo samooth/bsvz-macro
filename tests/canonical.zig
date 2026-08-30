@@ -4,6 +4,7 @@ const bsvz = @import("bsvz");
 
 const testing = std.testing;
 const xswap_cases = @import("fixtures/xswap_cases.zig").cases;
+const loop_cases = @import("fixtures/loop_cases.zig").cases;
 
 test "canonical: XSWAP expansion" {
     const allocator = testing.allocator;
@@ -11,6 +12,18 @@ test "canonical: XSWAP expansion" {
         const result = try bsvz_macro.compile(allocator, case.source, .{});
         defer result.deinit(allocator);
         try testing.expect(result.bytecode.len > 0);
+    }
+}
+
+test "canonical: LOOP fixtures opcode counts" {
+    const allocator = testing.allocator;
+    for (loop_cases) |case| {
+        const result = try bsvz_macro.compile(allocator, case.source, .{});
+        defer result.deinit(allocator);
+        if (result.opcode_count != case.expected_opcodes) {
+            std.debug.print("source: {s}, expected {d} opcodes, got {d}\n", .{ case.source, case.expected_opcodes, result.opcode_count });
+            return error.TestExpectedEqual;
+        }
     }
 }
 
@@ -127,4 +140,38 @@ test "canonical: PELS_LOCKING_SCRIPT end-to-end" {
         .{},
     );
     try testing.expectError(error.SimError, result);
+}
+
+test "canonical: opcode_count counts opcodes not bytes" {
+    const allocator = testing.allocator;
+    // OP_1 OP_2 OP_ADD OP_DROP: 4 bytes, 4 opcodes
+    {
+        const result = try bsvz_macro.compile(allocator, "OP_1 OP_2 OP_ADD OP_DROP", .{});
+        defer result.deinit(allocator);
+        try testing.expectEqual(@as(u32, 4), result.byte_length);
+        try testing.expectEqual(@as(u32, 4), result.opcode_count);
+    }
+    // RANGE_CHECK[0,100]: 9 bytes but 8 opcodes (the 0x01 0x64 push is one opcode)
+    {
+        const result = try bsvz_macro.compile(allocator, "RANGE_CHECK[0,100]", .{});
+        defer result.deinit(allocator);
+        try testing.expectEqual(@as(u32, 9), result.byte_length);
+        try testing.expectEqual(@as(u32, 8), result.opcode_count);
+    }
+}
+
+test "canonical: countOpcodes handles push encodings" {
+    // Direct raw-bytecode checks of the counter.
+    // <push 4 bytes> OP_NOP -> 2 opcodes, 6 bytes
+    try testing.expectEqual(@as(u32, 2), bsvz_macro.countOpcodes(&.{ 0x04, 0xff, 0xff, 0xff, 0xff, 0x61 }));
+    // OP_PUSHDATA1 <len=3> abc -> 1 opcode, 5 bytes
+    try testing.expectEqual(@as(u32, 1), bsvz_macro.countOpcodes(&.{ 0x4c, 0x03, 0x01, 0x02, 0x03 }));
+    // OP_PUSHDATA2 <len=4> abcd -> 1 opcode, 7 bytes
+    try testing.expectEqual(@as(u32, 1), bsvz_macro.countOpcodes(&.{ 0x4d, 0x04, 0x00, 0x01, 0x02, 0x03, 0x04 }));
+    // OP_PUSHDATA4 <len=1> a -> 1 opcode, 6 bytes
+    try testing.expectEqual(@as(u32, 1), bsvz_macro.countOpcodes(&.{ 0x4e, 0x01, 0x00, 0x00, 0x00, 0xaa }));
+    // Minimal int pushes are single opcodes
+    try testing.expectEqual(@as(u32, 2), bsvz_macro.countOpcodes(&.{ 0x4f, 0x51 }));
+    // Empty script has zero opcodes
+    try testing.expectEqual(@as(u32, 0), bsvz_macro.countOpcodes(&.{}));
 }

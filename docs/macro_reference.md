@@ -74,11 +74,23 @@ PUSHTX [toCanonical] block per WP1605 §1.1: forces s into the range [0, n/2] by
 - Stack: [s] -> [s' where s' = s if s <= n/2 else n-s]
 - Expansion: DUP <n/2> GREATERTHAN IF <n> SWAP SUB ENDIF
 
+### PUSHTX_TOCANONICAL_FAST
+Alt-stack variant of `PUSHTX_TOCANONICAL` (WP1605 §1.4 white-paper errata corrected: the comparison is against `n/2`, not `Gx/2`). Produces byte-identical canonical s. The curve order `n` is pushed literally here (the alt stack is reserved for `Gx` in `PUSHTX_CONCATENATIONS_FAST` so the symbolic simulator — which executes both conditional branches linearly — does not underflow the alt stack).
+- Arity: 0
+- Stack: [s] -> [s' where s' = s if s <= n/2 else n-s]
+- Expansion: DUP <n/2> GREATERTHAN IF <n> SWAP SUB ENDIF
+
 ### PUSHTX_CONCATENATIONS
 PUSHTX [concatenations] block per WP1605 §1.1: builds the DER-encoded (r, s) byte string from r (below) and s (on top).
 - Arity: 0
 - Stack: [r, s] -> [DER(r, s)]
 - Expansion: SIZE DUP <0x24> ADD <0x30> SWAP CAT <02 20||Gx||02> CAT SWAP CAT SWAP CAT
+
+### PUSHTX_CONCATENATIONS_FAST
+Alt-stack variant of `PUSHTX_CONCATENATIONS` (WP1605 §1.4). Byte-identical DER output, but the `02 20 || Gx || 02` tag is assembled inline from the `Gx` held on the alt stack instead of re-pushing a 35-byte literal.
+- Arity: 0
+- Stack: [r, s] -> [DER(r, s)]
+- Expansion: SIZE DUP <0x24> ADD <0x30> SWAP CAT <02 20> FROMALTSTACK CAT <02> CAT CAT SWAP CAT SWAP CAT
 
 ### PUSHTX_TODER
 PUSHTX [toDER] block per WP1605 §1.1: canonicalises s and builds the DER structure.
@@ -86,11 +98,23 @@ PUSHTX [toDER] block per WP1605 §1.1: canonicalises s and builds the DER struct
 - Stack: [r, s] -> [DER(r, s)]
 - Expansion: PUSHTX_TOCANONICAL PUSHTX_CONCATENATIONS (inlined)
 
+### PUSHTX_TODER_FAST
+Alt-stack variant of `PUSHTX_TODER` (WP1605 §1.4): `PUSHTX_TOCANONICAL_FAST` + reverse-endianness + `PUSHTX_CONCATENATIONS_FAST`, byte-identical to `PUSHTX_TODER`.
+- Arity: 0
+- Stack: [r, s] -> [DER(r, s)]
+- Expansion: PUSHTX_TOCANONICAL_FAST (inlined reverse) PUSHTX_CONCATENATIONS_FAST (inlined)
+
 ### PUSHTX_SIGN[sighash_flag]
 PUSHTX [sign] block per WP1605 §1.1, using the k = a = 1 optimisation. Computes a deterministic signature over the message hash z on top of the stack. The sighash flag is appended to the DER signature together with the compressed public key (0x02 || Gx), ready for OP_CHECKSIG.
 - Arity: 1 (integer sighash flag, e.g. 1 for SIGHASH_ALL, 0x83 for SINGLE|ANYONECANPAY)
 - Stack: [z] -> [DER(r,s) || sighash || Gcomp]
 - Expansion: HASH256 <Gx> ADD <n> MOD PUSHTX_TODER <sighash> CAT <0x02||Gx> CAT
+
+### PUSHTX_SIGN_FAST[sighash_flag]
+Alt-stack variant of `PUSHTX_SIGN` (WP1605 §1.4 white-paper errata corrected). Produces a byte-identical signature but pushes `Gx` to the alt stack once (consumed in the concatenations step), avoiding the 35-byte `Gx` literal re-push. A `bsvz` ScriptEngine parity test verifies it matches `PUSHTX_SIGN` byte-for-byte over several message preimages.
+- Arity: 1 (integer sighash flag)
+- Stack: [z] -> [DER(r,s) || sighash || Gcomp]
+- Expansion: HASH256 <Gx> DUP TOALTSTACK ADD <n> MOD PUSHTX_TODER_FAST <sighash> CAT <0x02||Gx> CAT
 
 ### PUSHTX_OUTPUTS_REQUEST[item8_hex, items10_11_hex]
 PUSHTX [outputsRequest] block per WP1605 §1.3. Constructs the message fragment for the outputs section (item 9 plus item 8 and items 10/11). Both arguments are hex strings (with or without the `0x` prefix, even length) that are pushed as raw bytes.

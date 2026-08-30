@@ -300,7 +300,7 @@ const wallet = @import("zig-wallet-toolbox");
 const bsvz_macro = @import("bsvz-macro");
 
 // Anadir output con macro
-var builder = bsvz.transaction.builder.Builder.init(allocator);
+var builder = bsvz.transaction.Builder.init(allocator);
 try bsvz_macro.bridge.wallet.addMacroOutput(
     &builder,
     "OP_HASH160 0x0000000000000000000000000000000000000000 OP_EQUALVERIFY OP_CHECKSIG",

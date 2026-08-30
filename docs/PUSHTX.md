@@ -13,9 +13,13 @@ parameters.
 | WP1605 segment | Macro | Notes |
 |---|---|---|
 | `[toCanonical]1` | `PUSHTX_TOCANONICAL` | Forces `s ∈ [0, n/2]`. |
+| `[toCanonical]1` (alt-stack) | `PUSHTX_TOCANONICAL_FAST` | Byte-identical to `PUSHTX_TOCANONICAL` (white-paper errata corrected: compares `s` with `n/2`, not `Gx/2`). |
 | `[concatenations]` | `PUSHTX_CONCATENATIONS` | Builds `30 \|\| len \|\| 02 20 Gx 02 \|\| s`. |
+| `[concatenations]` (alt-stack) | `PUSHTX_CONCATENATIONS_FAST` | Byte-identical DER; assembles `02 20 Gx 02` from `Gx` on the alt stack. |
 | `[toDER]` | `PUSHTX_TODER` | Inlined: `PUSHTX_TOCANONICAL` + `PUSHTX_CONCATENATIONS`. |
+| `[toDER]` (alt-stack) | `PUSHTX_TODER_FAST` | Inlined: `PUSHTX_TOCANONICAL_FAST` + `PUSHTX_CONCATENATIONS_FAST`. |
 | `[sign]` | `PUSHTX_SIGN[sighash_flag]` | k = a = 1. Expects `z` (HASH256 of preimage) on top. |
+| `[sign]` (alt-stack) | `PUSHTX_SIGN_FAST[sighash_flag]` | Byte-identical to `PUSHTX_SIGN`; keeps `Gx` on the alt stack to avoid the 35-byte literal re-push. |
 | `[outputsRequest]` | `PUSHTX_OUTPUTS_REQUEST[item8_hex, items10_11_hex]` | Hex string args, even length. |
 | Preimage fragment (item 9 pattern) | `PUSHTX_FRAGMENT[n]` | PICK DUP HASH256 CAT. |
 
