@@ -32,6 +32,21 @@ across:
 - `tests/examples_tests.zig`, `tests/canonical.zig`, `tests/macro_e2e.zig`,
   `tests/stack_sim.zig` — example / end-to-end coverage.
 
+### CLI
+
+The CLI executable is built by `zig build` (installed to
+`zig-out/bin/bsvz-macro`). Smoke it directly:
+
+```sh
+echo 'OP_DUP OP_DROP' | zig-out/bin/bsvz-macro -        # -> 7675, exit 0
+echo 'UNKNOWN' | zig-out/bin/bsvz-macro -               # diagnostics, exit 1
+zig-out/bin/bsvz-macro --era nada - < /dev/null         # usage error, exit 2
+```
+
+The pure logic (`runCliFromArgs`) is designed to stay unit-testable without
+spawning a process; a `tests/cli_tests.zig` registration is the natural next
+wiring step if the surface grows.
+
 ### Sanitizers / release mode
 
 ```sh

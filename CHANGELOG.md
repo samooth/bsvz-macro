@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CLI executable** (`zig-out/bin/bsvz-macro`, `zig build run -- <args>`):
+  positional source file or `-` for stdin, full `CompileOptions` flag surface
+  (`--target/--network/--era/--block-height/--protocol-version/--tx-version/
+  --features/--standardness/--max-*/--enforce-standardness`), hex bytecode to
+  stdout or `--output`/`-o`, `--asm-out`, structured `--json` output,
+  diagnostics to stderr; exit 0/1/2 semantics.
+- **bsvz 0.2.0 Chronicle opcodes.** `OP_SUBSTR`, `OP_LEFT`, `OP_RIGHT`,
+  `OP_LSHIFTNUM`, `OP_RSHIFTNUM`, `OP_2MUL`, `OP_2DIV` lex as first-class
+  opcodes (legacy `OP_NOP4`–`OP_NOP8` names still work via bsvz aliases);
+  the simulator models their stack effects (net −1 for the string/numeric
+  shifts, neutral for 2mul/2div) so `max_stack_height` is correct for
+  Chronicle scripts. Corresponding `@has` features: `substr`, `left`,
+  `right`, `2mul`, `2div`, `ver`, `verif` (chronicle-era only).
 - **WASM/JS API: full `CompileOptions` forwarding.** The `bsvz_compile` export and
   `BsvzMacro.compile()` now accept the options that were previously silent
   defaults: `era`, `network`, `blockHeight`, `protocolVersion`, `txVersion`,
@@ -22,11 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   era select different branches, and out-of-range network/era returns
   `invalid_option`.
 
+### Changed
+
+- **Network-aware era derivation.** `block_height` → era resolution
+  (`eraFromBlockHeightForNetwork`) now respects the network family: BTC
+  heights cap at `bip`, BCH at `bch`; only BSV reaches
+  `bsv_pre_genesis`/`genesis`/`chronicle`. Previously
+  `block_height=620000` with `network=btc_mainnet` derived `.genesis`
+  (BSV history).
+- **Expander option caching.** `effectiveFeatures()`/`effectiveLimits()` are
+  resolved once at `Expander.init` instead of per conditional evaluation.
+- Dependency `bsvz` bumped 0.1.0 → **0.2.0** (Chronicle support tag).
+
 ### Fixed
 
 - `docs/TESTING.md` coverage section: the `Step.Compile.coverage` field is not
   present in this Zig 0.16.0-dev build; documented as a future wiring task instead
   of wiring a non-functional flag.
+- `tests/user_macros_tests.zig` used the old `ArrayListUnmanaged(u8){}`
+  struct-literal init, which official Zig 0.16.0 rejects (the local dev build
+  accepted it); migrated to `.empty` (CI failure).
 
 ## [0.1.0] - 2026-08-30
 

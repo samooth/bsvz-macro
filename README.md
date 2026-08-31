@@ -30,7 +30,8 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 
 ## Features
 
-- **11 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, `PUSHTX_FRAGMENT`
+- **24 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT`
+- **CLI**: `zig build run -- <source>` — hex/JSON output, full `CompileOptions` flags (see [CLI](#cli))
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
 - **Conditional compilation, 4 orthogonal layers**: eras (`@era(chronicle)`),
   features (`@has(cat)`, `@has(substr)`, `@has(otda)`, ...), limits
@@ -57,6 +58,35 @@ const contract = comptime bsvz_macro.compileComptime(
     .{ .target = .bsv_mainnet },
 ) catch unreachable;
 ```
+
+## CLI
+
+`zig build` installs a native binary at `zig-out/bin/bsvz-macro` (also runnable
+via `zig build run -- <args>`):
+
+```bash
+# Compile a file, hex bytecode to stdout
+bsvz-macro script.bsv
+
+# From stdin, era-gated Chronicle opcodes
+echo 'OP_LSHIFTNUM' | bsvz-macro --era chronicle -
+
+# Structured JSON result
+bsvz-macro --json --emit-asm script.bsv
+
+# Full CompileOptions surface
+bsvz-macro --network bsv_mainnet --block-height 950000 \
+  --features cat,split --standardness cleanstack \
+  --emit-asm --asm-out out.asm -o out.hex script.bsv
+```
+
+Every `CompileOptions` field maps to a flag: `--target`, `--network`, `--era`,
+`--block-height`, `--protocol-version`, `--tx-version`, `--features`
+(`+name`/`-name` toggles), `--standardness`, `--max-script-size`,
+`--max-stack-elements`, `--max-push-size`, `--max-opcodes`,
+`--(no-)enforce-standardness`, `--(no-)emit-asm`, `--verbose`/`-v`,
+`--output`/`-o`, `--asm-out`, `--json`. Exit codes: 0 ok, 1 compile error
+(diagnostics on stderr), 2 usage error.
 
 ## Installation
 

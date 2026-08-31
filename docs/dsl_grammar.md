@@ -67,3 +67,12 @@ dead branch never fires).
 Era boundaries (mainnet heights): satoshi 0–173,804 · bip 173,805–478,557 ·
 bch 478,558–556,766 · bsv_pre_genesis 556,767–620,537 · genesis
 620,538–943,815 · chronicle 943,816+.
+
+## Chronicle opcodes (bsvz 0.2.0)
+
+Since bsvz 0.2.0 the Chronicle opcode names are first-class in the DSL:
+`OP_SUBSTR` (0xb3), `OP_LEFT` (0xb4), `OP_RIGHT` (0xb5), `OP_LSHIFTNUM`
+(0xb6), `OP_RSHIFTNUM` (0xb7), `OP_2MUL` (0x8d), `OP_2DIV` (0x8e). The legacy
+`OP_NOP4`–`OP_NOP8` names still lex (bsvz keeps them as aliases). Gate them
+with `@has(substr)`, `@has(lshiftnum)`, `@has(2mul)`, ... or `@era(chronicle)`
+— the features are chronicle-era only.

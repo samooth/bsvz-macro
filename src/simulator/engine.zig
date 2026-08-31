@@ -61,6 +61,10 @@ pub const SymbolicEngine = struct {
     alt_stack: SymbolicStack,
     transitions: std.ArrayList(StackTransition),
     allocator: std.mem.Allocator,
+    /// Upper bound for the result length of concatenating ops such as OP_CAT.
+    /// Defaults to the pre-Chronicle policy limit (520 B); set from
+    /// `CompileOptions.effectiveLimits().push` by the compile pipeline.
+    max_push: u32 = 520,
 
     pub fn init(allocator: std.mem.Allocator) SymbolicEngine {
         return .{
@@ -263,7 +267,7 @@ pub const SymbolicEngine = struct {
                 const len1: u32 = if (std.meta.activeTag(item1.type) == .bytes) item1.type.bytes else 0;
                 const len2: u32 = if (std.meta.activeTag(item2.type) == .bytes) item2.type.bytes else 0;
                 const new_len = len1 + len2;
-                if (new_len > 520) return SimError.PushTooLarge;
+                if (new_len > self.max_push) return SimError.PushTooLarge;
                 try self.main_stack.push(a, .{ .type = StackType{ .bytes = new_len } });
             },
             .OP_SPLIT => {

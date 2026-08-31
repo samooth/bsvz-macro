@@ -214,6 +214,7 @@ fn compileInternal(
     }
     const base_stack_count: u16 = if (extra_stack_items.len > 0) @intCast(extra_stack_items.len) else pre_populated;
 
+    engine.max_push = options.effectiveLimits().push;
     const sim_report = engine.simulateWithDiagnostics(bytecode, options.effectiveLimits().stack, diagnostics) catch |e| {
         allocator.free(bytecode);
         return switch (e) {

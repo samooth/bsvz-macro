@@ -561,3 +561,34 @@ test "flags: LOOP over chronicle opcodes unrolls" {
     defer result.deinit(allocator);
     try testing.expectEqual(@as(u32, 8), result.byte_length);
 }
+
+test "flags: OP_CAT push limit follows effectiveLimits().push" {
+    // Bytecode: two 300-byte PUSHDATA2 pushes followed by OP_CAT (0x7e).
+    // 300 + 300 = 600 > 520 (default policy) but < 100_000.
+    const allocator = testing.allocator;
+    var code: std.ArrayList(u8) = .empty;
+    defer code.deinit(allocator);
+    for ([_]usize{ 300, 300 }) |len| {
+        try code.append(allocator, 0x4d);
+        try code.append(allocator, @intCast(len & 0xff));
+        try code.append(allocator, @intCast(len >> 8));
+        try code.appendNTimes(allocator, 0x41, len);
+    }
+    try code.append(allocator, 0x7e);
+
+    const Engine = @import("bsvz-macro").simulator;
+    var engine_default = Engine.SymbolicEngine.init(allocator);
+    defer engine_default.deinit();
+    try engine_default.main_stack.push(allocator, .{ .type = .{ .bytes = 300 } });
+    try engine_default.main_stack.push(allocator, .{ .type = .{ .bytes = 300 } });
+    try testing.expectError(error.PushTooLarge, engine_default.simulate(code.items, 1000));
+
+    var engine_big = Engine.SymbolicEngine.init(allocator);
+    defer engine_big.deinit();
+    engine_big.max_push = 100_000;
+    try engine_big.main_stack.push(allocator, .{ .type = .{ .bytes = 300 } });
+    try engine_big.main_stack.push(allocator, .{ .type = .{ .bytes = 300 } });
+    const report = try engine_big.simulate(code.items, 1000);
+    defer allocator.free(report.final_stack);
+    try testing.expect(report.final_stack.len >= 1);
+}
