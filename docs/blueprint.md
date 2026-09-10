@@ -72,49 +72,59 @@
 
 ```
 bsvz-macro/
-  build.zig
-  build.zig.zon          # Dependencia: bsvz, zig-wallet-toolbox
-  src/
-    lib.zig              # API publica (root)
-    prelude.zig          # Macros predefinidos (M canonica)
-    lexer/
-      token.zig          # Definicion de tokens
-      scanner.zig        # Analisis lexico (single-pass)
-      error.zig          # LexError: UnrecognizedToken, InvalidLiteral
-    parser/
-      ast.zig            # Nodos: OpcodeLiteral, MacroInvocation, Block, Loop
-      parser.zig         # Recursive descent / Pratt
-      error.zig          # ParseError: UnexpectedToken, ArityMismatch
-    expander/
-      table.zig          # M: MacroTable (comptime + runtime)
-      expander.zig       # Single-pass expander
-      comptime_exp.zig   # Expansion comptime de Zig (meta-macros)
-      error.zig          # ExpandError: UnboundMacro, Overflow
-    simulator/
-      stack.zig          # Modelo simbolico del stack (S, A)
-      engine.zig         # Ejecutor simbolico de opcodes
-      algebra.zig        # Precondicion P -> Postcondicion Q
-      error.zig          # SimError: StackUnderflow, TypeMismatch
-    encoder/
-      push.zig           # Minimal push encoding (OP_0..OP_16, PUSHDATA1..4)
-      asm.zig            # Emision a ASM (human-readable)
-      hex.zig            # Emision a hex (wire-format)
-    validator/
-      bounds.zig         # Limites: 10k bytes, 1k stack, 520B push
-      policy.zig         # Reglas de policy (standardness)
-      error.zig          # ValError: ScriptTooLarge, StackTooDeep
-  tests/
-    macro_e2e.zig        # Tests end-to-end: source -> bytecode
-    canonical.zig        # Tests de la familia canonica (XSWAP, XDROP, etc.)
-    stack_sim.zig        # Tests del ejecutor simbolico
-    fixtures/
-      xswap_cases.zig
-      loop_cases.zig
-      covenant_cases.zig
-  docs/
-    blueprint.md         # Este documento
-    macro_reference.md   # Documentacion de cada macro predefinido
-    dsl_grammar.md       # Gramatica formal del DSL
+   build.zig
+   build.zig.zon          # Dependencia: bsvz, zig-wallet-toolbox
+   src/
+     lib.zig              # API publica (root): compile, compileComptime, compileWithTable...
+     options.zig           # CompileOptions: Target, Era, Network, FeatureSet, LimitSet
+     prelude.zig           # 24 macros canonicos (XSWAP, PUSHTX/PELS family)
+     bolt.zig              # 7 macros BOLT (b017): covenant suffixes + pay2Proof
+     diagnostics.zig       # CompileDiagnostic + SourceLocation (compileWithDiagnostics)
+     cli.zig               # CLI ejecutable (zig-out/bin/bsvz-macro)
+     wasm.zig              # Bindings wasm32-freestanding (zig build wasm)
+     lexer/
+       token.zig          # Definicion de tokens
+       scanner.zig        # Analisis lexico (single-pass)
+       error.zig          # LexError: UnrecognizedToken, InvalidLiteral
+     parser/
+       ast.zig            # Nodos: OpcodeLiteral, MacroInvocation, Block, Loop
+       parser.zig         # Recursive descent
+       error.zig          # ParseError: UnexpectedToken, ArityMismatch
+     expander/
+       table.zig          # M: MacroTable (runtime; comptime via compileComptime en lib.zig)
+       expander.zig       # Single-pass expander
+       error.zig          # ExpandError: UnboundMacro, Overflow
+     simulator/
+       stack.zig          # Modelo simbolico del stack (S, A)
+       engine.zig         # Ejecutor simbolico de opcodes
+       error.zig          # SimError: StackUnderflow, TypeMismatch
+     encoder/
+       push.zig           # Minimal push encoding (OP_0..OP_16, PUSHDATA1..4)
+       asm.zig            # Emision a ASM (human-readable)
+       hex.zig            # Emision a hex (wire-format)
+     validator/
+       bounds.zig         # Limites: 10k bytes, 1k stack, 520B push
+       policy.zig         # Reglas de policy (standardness)
+       error.zig          # ValError: ScriptTooLarge, StackTooDeep
+     bridge/
+       bsvz.zig           # Integracion con bsvz ScriptEngine
+       wallet.zig         # Integracion con zig-wallet-toolbox
+   tests/
+     macro_e2e.zig        # Tests end-to-end: source -> bytecode
+     canonical.zig        # Tests de la familia canonica (XSWAP, XDROP, etc.)
+     stack_sim.zig        # Tests del ejecutor simbolico
+     bolt_port_tests.zig  # Tests del port BOLT (b017): goldens sha256 + layouts
+     ...                  # (lexer, parser, expander, simulator, validator, flags,
+                          #  negative, property, benchmark, bridge, diagnostics,
+                          #  user_macros, pushtx_fast, script_engine, helpers,
+                          #  test_data, examples)
+     fixtures/
+       xswap_cases.zig
+       loop_cases.zig
+   docs/
+     blueprint.md         # Este documento
+     macro_reference.md   # Documentacion de cada macro predefinido
+     dsl_grammar.md       # Gramatica formal del DSL
 ```
 
 ### 2.2 Dependencias externas
@@ -354,10 +364,9 @@ pub const MacroTable = struct {
         expand_fn: *const fn (
             allocator: std.mem.Allocator,
             args: []const AstNode,
+            body: ?[]const AstNode,
             table: *const MacroTable,
         ) ExpandError![]const u8,
-        // Para comptime macros (definidos en Zig, no en DSL)
-        comptime_expand: ?*const fn (comptime args: anytype) []const u8,
     };
 
     pub const ParamType = enum {
@@ -369,21 +378,49 @@ pub const MacroTable = struct {
 };
 ```
 
-#### 4.3.2 Familia canonica predefinida (prelude.zig)
+(La expansion comptime no es un campo aparte: `compileComptime` en `lib.zig`
+invoca el mismo pipeline `compile` sobre un `FixedBufferAllocator` a tiempo
+de compilacion.)
+
+#### 4.3.2 Familia canonica predefinida (prelude.zig — 24 macros)
 
 | Macro | Arity | Expansion | Stack P->Q |
 |---|---|---|---|
 | `OP_XSWAP[n]` | 1 (int) | `PUSH(n-1) PICK PUSH(n-1) ROLL SWAP DROP` | `[..., x0, xn]` -> `[..., xn, x0]` |
 | `OP_XDROP[n]` | 1 (int) | `PUSH(n-1) ROLL DROP` | `[..., x0, xn]` -> `[...]` |
 | `OP_XROT[n]` | 1 (int) | `PUSH(n-1) ROLL` | `[..., x0, xn]` -> `[xn, ..., x0]` |
-| `OP_HASHCAT` | 0 | `DUP SHA256 SWAP CAT` (o fallback si CAT disabled) | `[x]` -> `[x || SHA256(x)]` |
+| `OP_HASHCAT` | 0 | `DUP SHA256 SWAP CAT` | `[x]` -> `[x || SHA256(x)]` |
 | `LOOP[n]{body}` | 1 (int) + 1 (block) | `body(0) body(1) ... body(n-1)` | Segun body |
-| `IFDUP` | 0 | `DUP IF { DUP }` (nativo, pero como ejemplo) | `[x]` -> `[x]` o `[x, x]` |
-| `VERIFY_ALL` | 0+ (var) | `BOOLAND...VERIFY` | `[b1,b2,...]` -> `[]` |
-| `VERIFY_ANY` | 0+ (var) | `BOOLOR...VERIFY` | `[b1,b2,...]` -> `[]` |
-| `RANGE_CHECK[min,max]` | 2 (int) + 1 (value) | `DUP min GE SWAP max LE BOOLAND VERIFY` | `[x]` -> `[]` |
-| `SAFE_DIV` | 0 | `DUP 0NOTEQUAL VERIFY DIV` | `[a,b]` -> `[a/b]` |
+| `IFDUP` | 0 | `DUP IF { DUP }` | `[x]` -> `[x]` o `[x, x]` |
+| `VERIFY_ALL[n]` | 1 (int) | `BOOLAND...VERIFY` | `[b1..bn]` -> `[]` |
+| `VERIFY_ANY[n]` | 1 (int) | `BOOLOR...VERIFY` | `[b1..bn]` -> `[]` |
+| `RANGE_CHECK[min,max]` | 2 (int) | `DUP min GE SWAP max LE BOOLAND VERIFY` | `[x]` -> `[]` |
+| `SAFE_DIV` | 0 | `SWAP DUP 0NOTEQUAL VERIFY DIV` | `[a,b]` -> `[a/b]` |
 | `P2PKH_FROM_PUBKEY` | 0 | `DUP HASH160 <push20> EQUALVERIFY CHECKSIG` | `[sig,pubkey]` -> `[]` |
+| `PUSHTX_FRAGMENT[n]` | 1 (int) | `PICK DUP HASH256 CAT` | `[..., xn]` -> `[..., xn, xn \|\| HASH256(xn)]` |
+| `PUSHTX_TOCANONICAL(_FAST)` | 0 | `DUP n/2 GT IF n SWAP SUB ENDIF` | `[s]` -> `[s' ∈ [0, n/2]]` |
+| `PUSHTX_CONCATENATIONS(_FAST)` | 0 | `SIZE DUP 0x24 ADD 0x30 SWAP CAT ...` | `[r, s]` -> `[DER(r,s)]` |
+| `PUSHTX_TODER(_FAST)` | 0 | `TOCANONICAL + CONCATENATIONS` | `[r, s]` -> `[DER(r,s)]` |
+| `PUSHTX_SIGN(_FAST)[sighash]` | 1 (int) | `HASH256 Gx ADD n MOD TODER <sighash> CAT Gcomp CAT` | `[z]` -> `[sig\|\|sighash\|\|Gcomp]` |
+| `PUSHTX_SIGN_BIT_SHIFT[security, sighash]` | 2 (int) | `push security OP_RSHIFT ...` | `[.., z]` -> `[.., <sig>]` |
+| `PUSHTX_OUTPUTS_REQUEST(_FAST)[item8, items10_11]` | 2 (str) | `2DUP HASH256 SWAP <item8> CAT ...` | `[..., H, F]` -> `[..., F, H, HASH256(H), ...]` |
+| `PELS_LOCKING_SCRIPT(_FAST)[sighash, item8, items10_11, pk_b_hash160]` | 4 | `[outputsRequest] [sign] CHECKSIGVERIFY ...` | (lock PELS completo) |
+| `PELS_LOCKING_SCRIPT_BIT_SHIFT[security, sighash, item8, items10_11, pk_b_hash160]` | 5 | `[outputsRequest] [sign_bit_shift] CHECKSIGVERIFY ...` | (lock PELS, bit-shift) |
+
+#### 4.3.2b Familia BOLT (bolt.zig — 7 macros)
+
+Port de los contratos b017; sufijos embebidos byte-fiel con golden sha256
+( tabla completa en `macro_reference.md` § BOLT ):
+
+| Macro | Arity | Expansion |
+|---|---|---|
+| `BOLT_SMB_LOCK_SUFFIX` | 0 | sufijo covenant `SimpleMultiBOLT` (5103 B) |
+| `BOLT_SMB_UNLOCK_SUFFIX` | 0 | sufijo unlock `SimpleMultiBOLT` (414 B) |
+| `BOLT_MS_LOCK_SUFFIX` | 0 | sufijo covenant `MinSimpleBOLT` (1113 B) |
+| `BOLT_SMB_LOCK[...]` | 11 (str) | 11 data pushes + sufijo SMB |
+| `BOLT_MS_LOCK[...]` | 6 (str) | 6 data pushes + sufijo MS |
+| `BOLT_P2P_LOCK[pkh]` | 1 (str) | `0x02b017 EQUALVERIFY DUP HASH160 <pkh> EQUALVERIFY CHECKSIG` |
+| `BOLT_P2P_UNLOCK[sig, pubkey]` | 2 (str) | `<sig> <pubkey> 0x02b017` |
 
 #### 4.3.3 Algoritmo de expansion (single-pass)
 

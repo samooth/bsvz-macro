@@ -30,7 +30,7 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 
 ## Features
 
-- **24 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT`
+- **31 registered macros**: **24 canonical** — `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT` — and **7 BOLT (b017)** contract macros
 - **BOLT (b017) contract macros**: the full covenant suffixes of the BSV layer-1 token protocol — `BOLT_SMB_LOCK_SUFFIX` / `BOLT_SMB_UNLOCK_SUFFIX` (fungible `SimpleMultiBOLT`, 5103/414 bytes), `BOLT_MS_LOCK_SUFFIX` (identity NFT `MinSimpleBOLT`, 1113 bytes), the composed locks `BOLT_SMB_LOCK[11 args]` / `BOLT_MS_LOCK[6 args]`, and the `pay2Proof` pair `BOLT_P2P_LOCK[pkh]` / `BOLT_P2P_UNLOCK[sig, pubkey]` — each suffix byte-faithful and golden-tested against the sha256 fingerprints in the b017 `REGISTRY`
 - **CLI**: `zig build run -- <source>` — hex/JSON output, full `CompileOptions` flags (see [CLI](#cli))
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`

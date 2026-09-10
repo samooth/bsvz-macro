@@ -18,8 +18,13 @@ bsvz-macro/
   build.zig
   build.zig.zon
   src/
-    lib.zig              # API publica
-    prelude.zig          # Macros predefinidos (11 macros)
+    lib.zig              # API publica: compile, compileComptime, compileWithTable, ...
+    options.zig           # CompileOptions (Target, Era, Network, FeatureSet, LimitSet)
+    prelude.zig           # 24 macros canonicos (XSWAP, PUSHTX/PELS, ...)
+    bolt.zig              # 7 macros BOLT (b017): covenant suffixes + pay2Proof
+    diagnostics.zig       # Diagnostico con SourceLocation
+    cli.zig               # CLI ejecutable
+    wasm.zig              # Bindings wasm32-freestanding
     lexer/
       token.zig          # Definicion de tokens
       scanner.zig        # Analisis lexico
@@ -30,8 +35,7 @@ bsvz-macro/
       error.zig          # Errores del parser
     expander/
       table.zig          # Tabla de macros
-      expander.zig       # Expansor single-pass
-      comptime_exp.zig   # Expansion comptime
+      expander.zig       # Expansionor single-pass
       error.zig          # Errores de expansion
     simulator/
       stack.zig          # Modelo simbolico del stack
@@ -52,10 +56,14 @@ bsvz-macro/
     macro_e2e.zig        # Tests end-to-end
     canonical.zig        # Tests de macros canonicas
     stack_sim.zig        # Tests del simulador
+    bolt_port_tests.zig  # Tests del port BOLT (b017): goldens sha256 + layouts
+    ...                  # (lexer, parser, expander, simulator, validator, flags,
+                         #  negative, property, benchmark, bridge, diagnostics,
+                         #  user_macros, pushtx_fast, script_engine, helpers,
+                         #  test_data, examples)
     fixtures/
       xswap_cases.zig
       loop_cases.zig
-      covenant_cases.zig
   docs/
     blueprint.md         # Especificacion completa
     macro_reference.md   # Referencia de macros

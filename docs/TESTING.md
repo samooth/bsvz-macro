@@ -12,9 +12,9 @@ zig build test
 ```
 
 This compiles and runs every test module in `tests/` plus the in-source test
-block in `src/lib.zig`. Each module is a separate test root so failures are
-isolated per file. As of this writing the suite contains **320 passing tests**
-across:
+blocks in `src/lib.zig` and `src/bolt.zig`. Each module is a separate test root
+so failures are isolated per file. As of this writing the suite contains
+**342 passing tests** across:
 
 - `tests/lexer_tests.zig`, `tests/parser_tests.zig`, `tests/expander_tests.zig`,
   `tests/simulator_tests.zig`, `tests/validator_tests.zig` — unit + negative +
@@ -24,6 +24,13 @@ across:
   legacy compatibility, era→feature derivation table).
 - `tests/negative_tests.zig` — error-condition coverage (lexer/parser/expander/
   simulator/validator).
+- `tests/bolt_port_tests.zig` — BOLT (b017) contract macros: each embedded
+  covenant suffix is hashed and compared against the sha256 golden
+  fingerprints published in the b017 `REGISTRY`; composed locks are checked
+  against the exact leading-data-push + suffix byte layout, plus arity /
+  malformed-hex fail-closed cases.
+- `tests/pushtx_fast_tests.zig` — WP1605 §1.4 alt-stack FAST pairs + the
+  `compileWithUnlockingScript` end-to-end simulation entry point.
 - `tests/property_tests.zig` — **property-based invariants** (determinism,
   loop unrolling, composition, conditional flag selection, randomized inputs).
 - `tests/benchmark_tests.zig` — performance smoke + stress tests.
@@ -31,6 +38,13 @@ across:
   utilities themselves (builders + assertion helpers).
 - `tests/examples_tests.zig`, `tests/canonical.zig`, `tests/macro_e2e.zig`,
   `tests/stack_sim.zig` — example / end-to-end coverage.
+- `tests/script_engine_tests.zig` — bsvz `ScriptEngine` wiring smoke tests
+  (real engine, no mocks).
+- `tests/bridge_tests.zig` — P2PKH/P2SH/PELS wallet output helpers.
+- `tests/diagnostics_tests.zig` — `compileWithDiagnostics` +
+  `SourceLocation` error reporting.
+- `tests/user_macros_tests.zig` — user-defined `MacroTable` +
+  `registerMacro` flows.
 
 ### CLI
 
