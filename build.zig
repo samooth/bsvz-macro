@@ -375,4 +375,18 @@ pub fn build(b: *std.Build) void {
      });
      const run_flags_tests = b.addRunArtifact(flags_tests);
      test_step.dependOn(&run_flags_tests.step);
- }
+
+     // BOLT (b017) port tests — golden suffix hashes + composed lock layouts
+     const bolt_port_test_module = b.createModule(.{
+         .root_source_file = b.path("tests/bolt_port_tests.zig"),
+         .target = target,
+         .optimize = optimize,
+     });
+     bolt_port_test_module.addImport("bsvz-macro", macro_mod);
+     bolt_port_test_module.addImport("bsvz", bsvz_mod);
+     const bolt_port_tests = b.addTest(.{
+         .root_module = bolt_port_test_module,
+     });
+     const run_bolt_port_tests = b.addRunArtifact(bolt_port_tests);
+     test_step.dependOn(&run_bolt_port_tests.step);
+}

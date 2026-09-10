@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **BOLT (b017) contract macros** (`src/bolt.zig`, registered alongside the
+  canonical macros): the Bitcoin Original Layer-1 Token covenant templates
+  ported byte-for-byte from the b017 library. Seven macros —
+  `BOLT_SMB_LOCK_SUFFIX` (fungible `SimpleMultiBOLT` covenant, 5103 bytes),
+  `BOLT_SMB_UNLOCK_SUFFIX` (414 bytes), `BOLT_MS_LOCK_SUFFIX` (identity NFT
+  `MinSimpleBOLT`, 1113 bytes), the composed locks `BOLT_SMB_LOCK[11 hex args]`
+  and `BOLT_MS_LOCK[6 hex args]` (data pushes + suffix, matching
+  `SimpleMultiTemplate.lock()`'s exact layout), and the `pay2Proof` pair
+  `BOLT_P2P_LOCK[pkh]` / `BOLT_P2P_UNLOCK[sig, pubkey]` (the `b017` marker
+  proof). The suffix byte arrays are golden-tested against the sha256
+  fingerprints published in the b017 `REGISTRY` (`368c45fd…`, `1b826327…`,
+  `2892679d…`), so a drift in the port is a test failure, not a silent
+  consensus divergence.
+- **Simulator: boolean arithmetic ops now yield integers (consensus fix).**
+  `OP_NOT`, `OP_0NOTEQUAL`, `OP_BOOLAND`, `OP_BOOLOR` push `integer` results
+  (with computed 0/1 values when operand literals are known) instead of
+  `bool`, matching Bitcoin Script semantics where these ops produce numbers.
+  This unblocks scripts that feed their result into numeric positions (e.g.
+  the b017 covenant's `OP_0NOTEQUAL OP_SPLIT` split-offset pattern); pure
+  comparison ops (`OP_EQUAL`, `OP_LESSTHAN`, …) still push `bool`.
 - **CLI executable** (`zig-out/bin/bsvz-macro`, `zig build run -- <args>`):
   positional source file or `-` for stdin, full `CompileOptions` flag surface
   (`--target/--network/--era/--block-height/--protocol-version/--tx-version/

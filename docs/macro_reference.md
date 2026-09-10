@@ -149,6 +149,65 @@ PELS locking script using the bit-shift `PUSHTX_SIGN_BIT_SHIFT` instead of `PUSH
 - Arity: 5 (integer, integer, string, string, string)
 - Expansion: `[outputsRequest] [sign_bit_shift] OP_CHECKSIGVERIFY OP_SWAP <0x68> OP_SPLIT OP_NIP OP_SWAP <0x8> OP_SPLIT OP_SWAP OP_CAT OP_EQUALVERIFY OP_DUP OP_HASH160 <H(PK_B)> OP_EQUALVERIFY OP_CHECKSIG`
 
+## BOLT (b017) Contract Macros
+
+Ported from the [b017](https://github.com/BOLT-Association/b017) Bitcoin
+Original Layer-1 Token templates. A b017 token is a 1-satoshi UTXO whose
+locking script is N leading data pushes (the token state) followed by a
+static covenant suffix. The four embedded suffixes are byte-faithful to the
+b017 `0.0.0-b2+` templates — each is golden-tested against the sha256
+fingerprints published in the b017 `REGISTRY`:
+
+| Suffix | Bytes | sha256 (b017 REGISTRY golden) |
+|---|---|---|
+| `SimpleMultiBOLT` lock | 5103 | `368c45fdf92164e4e0869c9062be84621ea8ef040e8591399bf6ff3b8c819b11` |
+| `SimpleMultiBOLT` unlock | 414 | `1b826327a9c9f8b7098047d3f3b6c996a01ad3474796f2d1d33faf0c0fed290d` |
+| `MinSimpleBOLT` lock | 1113 | `2892679d85ef021d754036094ecd77e14f0c3934a23a48e09e7da337e50f823d` |
+| `MinSimpleBOLT` unlock (shared with SMB) | 414 | `1b826327a9c9f8b7098047d3f3b6c996a01ad3474796f2d1d33faf0c0fed290d` |
+
+### BOLT_SMB_LOCK_SUFFIX
+Emit the static `SimpleMultiBOLT` fungible-token covenant suffix (5103 bytes).
+- Arity: 0
+- Stack: n/a (emits the lock suffix; prepend the 11 data-push args yourself, or use `BOLT_SMB_LOCK`)
+
+### BOLT_SMB_UNLOCK_SUFFIX
+Emit the static `SimpleMultiBOLT` unlock suffix (414 bytes).
+- Arity: 0
+- Stack: n/a (the ~198 unlock data args — ancestor pieces, interop args, sig preimage parts — are runtime-supplied by the spender and must be pushed before this suffix)
+
+### BOLT_MS_LOCK_SUFFIX
+Emit the static `MinSimpleBOLT` identity-NFT covenant suffix (1113 bytes).
+- Arity: 0
+- Stack: n/a
+
+### BOLT_SMB_LOCK[balance, balanceCommit, pubKeyHash, pubKeyHashCommit, pubKeyHashCommit2, otherGrandparentOutpoint, txoType, outputIndexN, parentOutpoint, grandparentOutpoint, issuerPubKey]
+Assemble a complete `SimpleMultiBOLT` locking script: 11 hex data pushes
+(field sizes 16/16/20/20/20/36/1/1/36/36/33 bytes) followed by the golden
+covenant suffix — the byte layout `SimpleMultiTemplate.lock()` produces in
+b017.
+- Arity: 11 (string, all hex; args must be exact-length fields)
+- Example (genesis): `BOLT_SMB_LOCK[0x<16B balance>, 0x<16B>, 0x<20B>, 0x<20B>, 0x<20B>, 0x<36B>, 0x20, 0x00, 0x<36B>, 0x<36B>, 0x02<32B issuer>]`
+
+### BOLT_MS_LOCK[pubKeyHash, issuerPubKey, pubKeyHashCommitment, txoType, parentOutpoint, grandparentOutpoint]
+Assemble a complete `MinSimpleBOLT` locking script: 6 hex data pushes
+(20/33/20/1/36/36 bytes) followed by the golden covenant suffix.
+- Arity: 6 (string, all hex)
+
+### BOLT_P2P_LOCK[pkh]
+The b017 `pay2Proof` marker-proof UTXO: `<02b017> OP_EQUALVERIFY OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG`. The unlock carries its own `02b017` marker push, so the lock's marker EQUALVERIFY proves the marker was supplied.
+- Arity: 1 (string, 20-byte hex pkh)
+- Expansion: `0x02b017 OP_EQUALVERIFY OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG`
+
+### BOLT_P2P_UNLOCK[sig, pubkey]
+The `pay2Proof` unlocking script: signature, compressed pubkey, then the b017 marker push.
+- Arity: 2 (string: DER sig hex, 33-byte compressed pubkey hex)
+- Expansion: `<sig> <pubkey> 0x02b017`
+
+Note: the covenant suffixes use deliberately non-minimal pushes (bare
+`OP_BIN2NUM`-guarded data pushes, sX style) — they are consensus-valid but
+not `minimaldata`-clean; compile with `enforce_standardness = false` if
+policy validation rejects them.
+
 ## DSL Syntax
 
 ```

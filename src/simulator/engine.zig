@@ -327,19 +327,33 @@ pub const SymbolicEngine = struct {
             },
             .OP_NOT => {
                 const item = try self.main_stack.pop();
-                _ = item;
-                try self.main_stack.push(a, .{ .type = StackType.bool });
+                try self.main_stack.push(a, .{
+                    .type = StackType.integer,
+                    .value = if (item.value) |v| @intFromBool(v == 0) else null,
+                });
             },
             .OP_0NOTEQUAL => {
                 const item = try self.main_stack.pop();
-                _ = item;
-                try self.main_stack.push(a, .{ .type = StackType.bool });
+                try self.main_stack.push(a, .{
+                    .type = StackType.integer,
+                    .value = if (item.value) |v| @intFromBool(v != 0) else null,
+                });
             },
             .OP_BOOLAND, .OP_BOOLOR => {
                 const item1 = try self.main_stack.pop();
                 const item2 = try self.main_stack.pop();
-                _ = item1; _ = item2;
-                try self.main_stack.push(a, .{ .type = StackType.bool });
+                const result_val: ?i64 = if (item1.value != null and item2.value != null) blk: {
+                    const a_val: i64 = item1.value.?;
+                    const b_val: i64 = item2.value.?;
+                    break :blk if (op == .OP_BOOLAND)
+                        @intFromBool(a_val != 0 and b_val != 0)
+                    else
+                        @intFromBool(a_val != 0 or b_val != 0);
+                } else null;
+                try self.main_stack.push(a, .{
+                    .type = StackType.integer,
+                    .value = result_val,
+                });
             },
             .OP_ADD, .OP_SUB, .OP_MUL, .OP_DIV, .OP_MOD,
             .OP_LSHIFT, .OP_RSHIFT,

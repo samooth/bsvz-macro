@@ -31,6 +31,7 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 ## Features
 
 - **24 canonical macros**: `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT`
+- **BOLT (b017) contract macros**: the full covenant suffixes of the BSV layer-1 token protocol — `BOLT_SMB_LOCK_SUFFIX` / `BOLT_SMB_UNLOCK_SUFFIX` (fungible `SimpleMultiBOLT`, 5103/414 bytes), `BOLT_MS_LOCK_SUFFIX` (identity NFT `MinSimpleBOLT`, 1113 bytes), the composed locks `BOLT_SMB_LOCK[11 args]` / `BOLT_MS_LOCK[6 args]`, and the `pay2Proof` pair `BOLT_P2P_LOCK[pkh]` / `BOLT_P2P_UNLOCK[sig, pubkey]` — each suffix byte-faithful and golden-tested against the sha256 fingerprints in the b017 `REGISTRY`
 - **CLI**: `zig build run -- <source>` — hex/JSON output, full `CompileOptions` flags (see [CLI](#cli))
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
 - **Conditional compilation, 4 orthogonal layers**: eras (`@era(chronicle)`),
@@ -228,6 +229,13 @@ Source DSL
 | `PELS_LOCKING_SCRIPT[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script) | `[outputsRequest] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
 | `PELS_LOCKING_SCRIPT_FAST[sighash, item8, items10_11, pk_b_hash160]` | 4 | (full PELS script, alt-stack) | `[outputsRequest_FAST] [sign] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
 | `PELS_LOCKING_SCRIPT_BIT_SHIFT[security, sighash, item8, items10_11, pk_b_hash160]` | 5 | (full PELS script, bit-shift) | `[outputsRequest] [sign_bit_shift] OP_CHECKSIGVERIFY OP_SWAP 0x68 SPLIT NIP SWAP 0x8 SPLIT SWAP CAT EQUALVERIFY DUP HASH160 <H(PK_B)> EQUALVERIFY OP_CHECKSIG` |
+| `BOLT_SMB_LOCK_SUFFIX` | 0 | n/a | the b017 `SimpleMultiBOLT` covenant suffix (5103 B, golden sha256 `368c45fd…`) |
+| `BOLT_SMB_UNLOCK_SUFFIX` | 0 | n/a | the b017 `SimpleMultiBOLT` unlock suffix (414 B, golden sha256 `1b826327…`) |
+| `BOLT_MS_LOCK_SUFFIX` | 0 | n/a | the b017 `MinSimpleBOLT` covenant suffix (1113 B, golden sha256 `2892679d…`) |
+| `BOLT_SMB_LOCK[b, bc, pkh, pkhc1, pkhc2, ogp, txo, idx, parent, gp, issuer]` | 11 | n/a (lock assembly) | 11 hex data pushes (16/16/20/20/20/36/1/1/36/36/33 B) + `BOLT_SMB_LOCK_SUFFIX` |
+| `BOLT_MS_LOCK[pkh, issuer, pkhc, txo, parent, gp]` | 6 | n/a (lock assembly) | 6 hex data pushes (20/33/20/1/36/36 B) + `BOLT_MS_LOCK_SUFFIX` |
+| `BOLT_P2P_LOCK[pkh]` | 1 | n/a | `0x02b017 OP_EQUALVERIFY OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG` |
+| `BOLT_P2P_UNLOCK[sig, pubkey]` | 2 | n/a | `<sig> <pubkey> 0x02b017` |
 
 ## DSL Grammar
 

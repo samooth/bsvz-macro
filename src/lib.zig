@@ -5,6 +5,7 @@ pub const lexer = @import("lexer/scanner.zig");
 pub const parser = @import("parser/parser.zig");
 pub const expander = @import("expander/expander.zig");
 pub const prelude = @import("prelude.zig");
+pub const bolt = @import("bolt.zig");
 pub const simulator = @import("simulator/engine.zig");
 pub const validator = @import("validator/bounds.zig");
 pub const encoder = @import("encoder/hex.zig");
@@ -183,6 +184,7 @@ fn compileInternal(
 
     if (custom_table == null) {
         prelude.registerCanonicalMacros(&table) catch return MacroError.ExpandError;
+        bolt.registerBoltMacros(&table) catch return MacroError.ExpandError;
     }
 
     // Phase 4: Expand
@@ -352,6 +354,7 @@ test {
     _ = parser;
     _ = expander;
     _ = prelude;
+    _ = bolt;
     _ = simulator;
     _ = validator;
     _ = encoder;
