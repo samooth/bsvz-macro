@@ -769,6 +769,238 @@ fn sigilNftExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]
     return out.toOwnedSlice(allocator);
 }
 
+fn bytesToHex(buf: *[40]u8, bytes: [20]u8) []const u8 {
+    const hex = "0123456789abcdef";
+    for (0..bytes.len) |i| {
+        const b = bytes[i];
+        buf[i * 2] = hex[b >> 4];
+        buf[i * 2 + 1] = hex[b & 0xf];
+    }
+    return buf[0..40];
+}
+
+// ── STAS Token Protocol ──────────────────────────────────────────────────
+
+fn stasContractExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 2) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[1] != .string_literal) return ExpandError.TypeMismatch;
+
+    const issuer_pkh = try decodeHexOwned(allocator, args[0].string_literal, 20);
+    defer allocator.free(issuer_pkh);
+    const schema = args[1].string_literal;
+    if (schema.len == 0) return ExpandError.TypeMismatch;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitOpcode(&out, allocator, Opcode.OP_DUP);
+    try emitOpcode(&out, allocator, Opcode.OP_HASH160);
+    try emitPushData(&out, allocator, issuer_pkh);
+    try emitOpcode(&out, allocator, Opcode.OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, Opcode.OP_CHECKSIG);
+    try emitOpcode(&out, allocator, Opcode.OP_RETURN);
+    try emitPushData(&out, allocator, schema);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasLockExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 5) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[1] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[2] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[3] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[4] != .integer_literal) return ExpandError.TypeMismatch;
+
+    const dest_pkh = try decodeHexOwned(allocator, args[0].string_literal, 20);
+    defer allocator.free(dest_pkh);
+    const redemption_pkh = try decodeHexOwned(allocator, args[1].string_literal, 20);
+    defer allocator.free(redemption_pkh);
+    const symbol = args[2].string_literal;
+    if (symbol.len == 0 or symbol.len > 128) return ExpandError.TypeMismatch;
+    const data_hex = args[3].string_literal;
+    const is_splittable = args[4].integer_literal;
+    if (is_splittable < 0 or is_splittable > 1) return ExpandError.TypeMismatch;
+
+    const template_bytes = @embedFile("stas_v2_template.hex");
+    var template_str = std.ArrayListUnmanaged(u8).initCapacity(allocator, template_bytes.len) catch return ExpandError.OutOfMemory;
+    defer template_str.deinit(allocator);
+    try template_str.appendSlice(allocator, template_bytes);
+
+    var dest_hex_buf: [40]u8 = undefined;
+    const dest_hex = std.fmt.bufPrint(&dest_hex_buf, "{x}", .{dest_pkh}) catch unreachable;
+    var redemption_hex_buf: [40]u8 = undefined;
+    const redemption_hex = std.fmt.bufPrint(&redemption_hex_buf, "{x}", .{redemption_pkh}) catch unreachable;
+
+    var script_hex = std.ArrayListUnmanaged(u8).initCapacity(allocator, template_str.items.len) catch return ExpandError.OutOfMemory;
+    defer script_hex.deinit(allocator);
+
+    var remaining = template_str.items;
+    while (remaining.len > 0) {
+        if (std.mem.startsWith(u8, remaining, "[destinationPublicKeyHash]")) {
+            try script_hex.appendSlice(allocator, dest_hex);
+            remaining = remaining[34..];
+        } else if (std.mem.startsWith(u8, remaining, "[redemptionPublicKeyHash]")) {
+            try script_hex.appendSlice(allocator, redemption_hex);
+            remaining = remaining[26..];
+        } else {
+            script_hex.append(allocator, remaining[0]) catch return ExpandError.OutOfMemory;
+            remaining = remaining[1..];
+        }
+    }
+
+    const script_len = script_hex.items.len / 2;
+    const script_bytes = try allocator.alloc(u8, script_len);
+    defer allocator.free(script_bytes);
+    _ = std.fmt.hexToBytes(script_bytes, script_hex.items) catch return ExpandError.TypeMismatch;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+    try out.appendSlice(allocator, script_bytes);
+
+    try emitMinimalPushInt(&out, allocator, is_splittable);
+    try emitPushData(&out, allocator, symbol);
+    if (data_hex.len > 0) {
+        const data_hex_no_prefix = if (data_hex.len >= 2 and data_hex[0] == '0' and (data_hex[1] == 'x' or data_hex[1] == 'X')) data_hex[2..] else data_hex;
+        if (data_hex_no_prefix.len == 0 or (data_hex_no_prefix.len % 2) != 0) return ExpandError.TypeMismatch;
+        const data = try decodeHexOwned(allocator, data_hex, data_hex_no_prefix.len / 2);
+        defer allocator.free(data);
+        try emitPushData(&out, allocator, data);
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasSegmentExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 2) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+    if (args[1] != .string_literal) return ExpandError.TypeMismatch;
+
+    const satoshis = args[0].integer_literal;
+    if (satoshis < 0) return ExpandError.TypeMismatch;
+    const pubkey_hex = args[1].string_literal;
+    const pubkey = try decodeHexOwned(allocator, pubkey_hex, 33);
+    defer allocator.free(pubkey);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitMinimalPushInt(&out, allocator, satoshis);
+    try emitPushData(&out, allocator, pubkey);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasFundingExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 2) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+    if (args[1] != .string_literal) return ExpandError.TypeMismatch;
+
+    const funding_index = args[0].integer_literal;
+    if (funding_index < 0) return ExpandError.TypeMismatch;
+    const funding_txid_hex = args[1].string_literal;
+    const funding_txid_hex_no_prefix = if (funding_txid_hex.len >= 2 and funding_txid_hex[0] == '0' and (funding_txid_hex[1] == 'x' or funding_txid_hex[1] == 'X')) funding_txid_hex[2..] else funding_txid_hex;
+    if (funding_txid_hex_no_prefix.len != 64) return ExpandError.TypeMismatch;
+    const funding_txid = try decodeHexOwned(allocator, funding_txid_hex, 32);
+    defer allocator.free(funding_txid);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitMinimalPushInt(&out, allocator, funding_index);
+
+    var reversed: [32]u8 = undefined;
+    @memcpy(&reversed, funding_txid);
+    std.mem.reverse(u8, &reversed);
+    try out.appendSlice(allocator, &reversed);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasUnlockVersionExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 1) return ExpandError.ArityMismatch;
+    if (args[0] != .integer_literal) return ExpandError.TypeMismatch;
+
+    const version = args[0].integer_literal;
+    if (version < 0 or version > 5) return ExpandError.TypeMismatch;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitMinimalPushInt(&out, allocator, version);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasPreimageExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 1) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+
+    const preimage_hex = args[0].string_literal;
+    const preimage_hex_no_prefix = if (preimage_hex.len >= 2 and preimage_hex[0] == '0' and (preimage_hex[1] == 'x' or preimage_hex[1] == 'X')) preimage_hex[2..] else preimage_hex;
+    if (preimage_hex_no_prefix.len == 0 or (preimage_hex_no_prefix.len % 2) != 0) return ExpandError.TypeMismatch;
+    const preimage = try decodeHexOwned(allocator, preimage_hex, preimage_hex_no_prefix.len / 2);
+    defer allocator.free(preimage);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitPushData(&out, allocator, preimage);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasSigExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 1) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+
+    const sig_hex = args[0].string_literal;
+    const sig_hex_no_prefix = if (sig_hex.len >= 2 and sig_hex[0] == '0' and (sig_hex[1] == 'x' or sig_hex[1] == 'X')) sig_hex[2..] else sig_hex;
+    if (sig_hex_no_prefix.len == 0 or (sig_hex_no_prefix.len % 2) != 0) return ExpandError.TypeMismatch;
+    const sig = try decodeHexOwned(allocator, sig_hex, sig_hex_no_prefix.len / 2);
+    defer allocator.free(sig);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitPushData(&out, allocator, sig);
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn stasPubkeyExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 1) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+
+    const pubkey_hex = args[0].string_literal;
+    const pubkey = try decodeHexOwned(allocator, pubkey_hex, 33);
+    defer allocator.free(pubkey);
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitPushData(&out, allocator, pubkey);
+
+    return out.toOwnedSlice(allocator);
+}
+
 // ── AIP ─────────────────────────────────────────────────────────────────
 
 fn aipEncodeExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
@@ -918,5 +1150,45 @@ pub fn registerTemplateMacros(table: *MacroTable) !void {
         .arity = 4,
         .param_types = &.{ .string, .string, .string, .integer },
         .expand_fn = sigmaEncodeExpand,
+    });
+    try table.register("STAS_CONTRACT", .{
+        .arity = 2,
+        .param_types = &.{ .string, .string },
+        .expand_fn = stasContractExpand,
+    });
+    try table.register("STAS_LOCK", .{
+        .arity = 5,
+        .param_types = &.{ .string, .string, .string, .string, .integer },
+        .expand_fn = stasLockExpand,
+    });
+    try table.register("STAS_SEGMENT", .{
+        .arity = 2,
+        .param_types = &.{ .integer, .string },
+        .expand_fn = stasSegmentExpand,
+    });
+    try table.register("STAS_FUNDING", .{
+        .arity = 2,
+        .param_types = &.{ .integer, .string },
+        .expand_fn = stasFundingExpand,
+    });
+    try table.register("STAS_UNLOCK_VERSION", .{
+        .arity = 1,
+        .param_types = &.{.integer},
+        .expand_fn = stasUnlockVersionExpand,
+    });
+    try table.register("STAS_PREIMAGE", .{
+        .arity = 1,
+        .param_types = &.{.string},
+        .expand_fn = stasPreimageExpand,
+    });
+    try table.register("STAS_SIG", .{
+        .arity = 1,
+        .param_types = &.{.string},
+        .expand_fn = stasSigExpand,
+    });
+    try table.register("STAS_PUBKEY", .{
+        .arity = 1,
+        .param_types = &.{.string},
+        .expand_fn = stasPubkeyExpand,
     });
 }

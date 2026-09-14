@@ -30,7 +30,7 @@ The article establishes the theoretical foundation (stack algebra, pre/postcondi
 
 ## Features
 
-- **31 registered macros**: **24 canonical** — `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT` — and **7 BOLT (b017)** contract macros
+- **51 registered macros**: **24 canonical** — `OP_XSWAP`, `OP_XDROP`, `OP_XROT`, `OP_HASHCAT`, `IFDUP`, `SAFE_DIV`, `RANGE_CHECK`, `P2PKH_FROM_PUBKEY`, `VERIFY_ALL`, `VERIFY_ANY`, plus the full PUSHTX (WP1605) family: `PUSHTX_FRAGMENT`, `PUSHTX_TOCANONICAL(_FAST)`, `PUSHTX_CONCATENATIONS(_FAST)`, `PUSHTX_TODER(_FAST)`, `PUSHTX_SIGN(_FAST)`, `PUSHTX_SIGN_BIT_SHIFT`, `PUSHTX_OUTPUTS_REQUEST(_FAST)`, `PELS_LOCKING_SCRIPT(_FAST)`, `PELS_LOCKING_SCRIPT_BIT_SHIFT` — **7 BOLT (b017)** contract macros, and **17 template** protocol macros (`INSCRIPTION`, `LOCK`, `BSV21_*`, `BSV20_*`, `MAP_*`, `ORDLOCK`, `B_ENCODE`, `OPNS_*`, `BCAT_*`, `SIGIL_NFT`, `AIP_ENCODE`, `SIGMA_ENCODE`, `STAS_*`)
 - **BOLT (b017) contract macros**: the full covenant suffixes of the BSV layer-1 token protocol — `BOLT_SMB_LOCK_SUFFIX` / `BOLT_SMB_UNLOCK_SUFFIX` (fungible `SimpleMultiBOLT`, 5103/414 bytes), `BOLT_MS_LOCK_SUFFIX` (identity NFT `MinSimpleBOLT`, 1113 bytes), the composed locks `BOLT_SMB_LOCK[11 args]` / `BOLT_MS_LOCK[6 args]`, and the `pay2Proof` pair `BOLT_P2P_LOCK[pkh]` / `BOLT_P2P_UNLOCK[sig, pubkey]` — each suffix byte-faithful and golden-tested against the sha256 fingerprints in the b017 `REGISTRY`
 - **CLI**: `zig build run -- <source>` — hex/JSON output, full `CompileOptions` flags (see [CLI](#cli))
 - **Loop unrolling**: `LOOP[n]{ body }` with iterator substitution `<i>`
@@ -235,7 +235,35 @@ Source DSL
 | `BOLT_SMB_LOCK[b, bc, pkh, pkhc1, pkhc2, ogp, txo, idx, parent, gp, issuer]` | 11 | n/a (lock assembly) | 11 hex data pushes (16/16/20/20/20/36/1/1/36/36/33 B) + `BOLT_SMB_LOCK_SUFFIX` |
 | `BOLT_MS_LOCK[pkh, issuer, pkhc, txo, parent, gp]` | 6 | n/a (lock assembly) | 6 hex data pushes (20/33/20/1/36/36 B) + `BOLT_MS_LOCK_SUFFIX` |
 | `BOLT_P2P_LOCK[pkh]` | 1 | n/a | `0x02b017 OP_EQUALVERIFY OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG` |
-| `BOLT_P2P_UNLOCK[sig, pubkey]` | 2 | n/a | `<sig> <pubkey> 0x02b017` |
+ | `BOLT_P2P_UNLOCK[sig, pubkey]` | 2 | n/a | `<sig> <pubkey> 0x02b017` |
+ | `STAS_CONTRACT[issuer_pkh, schema]` | 2 | n/a | `OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_CHECKSIG OP_RETURN <schema>` |
+ | `STAS_LOCK[dest_pkh, redemption_pkh, symbol, data, splittable]` | 5 | n/a | STAS v2 covenant template + symbol + optional data + splittable flag |
+ | `STAS_SEGMENT[satoshis, pubkey]` | 2 | n/a | `<satoshis> <compressed_pubkey>` |
+ | `STAS_FUNDING[index, txid]` | 2 | n/a | `<index> <reversed_txid>` |
+ | `STAS_UNLOCK_VERSION[version]` | 1 | n/a | `<version 0..5>` |
+ | `STAS_PREIMAGE[hex]` | 1 | n/a | `<preimage_push>` |
+ | `STAS_SIG[hex]` | 1 | n/a | `<der_sig_push>` |
+ | `STAS_PUBKEY[hex]` | 1 | n/a | `<compressed_pubkey_push>` |
+ | `INSCRIPTION[content_type, data]` | 2 | n/a | `OP_0 OP_IF "ord" OP_1 <content_type> <data> OP_ENDIF` |
+ | `INSCRIPTION_FULL[envelope, content_type, suffix, flags]` | 4 | n/a | custom envelope + `OP_0 OP_IF "ord" OP_1 <content_type> <data> OP_ENDIF OP_RETURN <suffix> <flags>` |
+ | `LOCK[pkh_hex, block_height]` | 2 | n/a | `OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_1NEGATE OP_CHECKLOCKTIMEVERIFY OP_DROP OP_CHECKSIG` |
+ | `BSV21_DEPLOY[symbol, decimals, max_supply]` | 3 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-21","op":"deploy","sym":"<symbol>","dec":"<decimals>","max":"<max_supply>"} OP_ENDIF` |
+ | `BSV21_TRANSFER[token_id, amount]` | 2 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-21","op":"transfer","id":"<token_id>","amt":"<amount>"} OP_ENDIF` |
+ | `BSV21_BURN[token_id, amount]` | 2 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-21","op":"burn","id":"<token_id>","amt":"<amount>"} OP_ENDIF` |
+ | `BSV20_DEPLOY[tick, max_supply, decimals, mint_limit]` | 4 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"deploy","tick":"<tick>","max":"<max_supply>","lim":"<mint_limit>","dec":"<decimals>"} OP_ENDIF` |
+ | `BSV20_MINT[tick, amount]` | 2 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"mint","tick":"<tick>","amt":"<amount>"} OP_ENDIF` |
+ | `BSV20_TRANSFER[tick, amount]` | 2 | n/a | `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"transfer","tick":"<tick>","amt":"<amount>"} OP_ENDIF` |
+ | `MAP_SET[key, value]` | 2 | n/a | `OP_RETURN <MAP_PREFIX> "SET" <key> <value>` |
+ | `MAP_DEL[key]` | 1 | n/a | `OP_RETURN <MAP_PREFIX> "DEL" <key>` |
+ | `ORDLOCK[pkh_hex, covenant_pkh_hex, block_height]` | 3 | n/a | `OP_DUP OP_HASH160 <pkh> OP_EQUALVERIFY OP_1NEGATE OP_CHECKLOCKTIMEVERIFY OP_DROP OP_HASH160 <covenant_pkh> OP_EQUALVERIFY OP_CHECKSIG` |
+ | `B_ENCODE[payload_hex, content_type, charset, filename]` | 4 | n/a | `OP_RETURN <B_PREFIX> <payload> <content_type> <charset> <filename>` |
+ | `OPNS_LOCK[claimed_hex, domain, pow_hex]` | 3 | n/a | `<OPNS_CONTRACT> OP_RETURN OP_0 <genesis_outpoint> <claimed> <domain> <pow> <state_len>` |
+ | `OPNS_INSCRIBE[name, owner_script_hex]` | 2 | n/a | `<owner_script> OP_0 OP_IF "ord" OP_1 "application/op-ns" OP_0 <name> OP_ENDIF OP_RETURN "1opNS..." <genesis_outpoint>` |
+ | `BCAT_HEADER[info, mime, charset, filename, flag, txids_hex]` | 6 | n/a | `OP_RETURN <BCAT_NAMESPACE> <info> <mime> <charset> <filename> <flag> <TX1> <TX2> ...` |
+ | `BCAT_PART[data_hex]` | 1 | n/a | `OP_RETURN <BCAT_PART_NAMESPACE> <raw_data>` |
+ | `SIGIL_NFT[project_hash_hex, p2pkh_hash_hex, metadata_json]` | 3 | n/a | `OP_HASH160 <project_hash> OP_EQUALVERIFY OP_DUP OP_HASH160 <p2pkh_hash> OP_EQUALVERIFY OP_CHECKSIG OP_RETURN <metadata_json>` |
+ | `AIP_ENCODE[method, address, payload_hex]` | 3 | n/a | `<AIP_PREFIX> <method> <address> <payload>` |
+ | `SIGMA_ENCODE[protocol, address, payload_hex, type]` | 4 | n/a | `<SIGMA_PREFIX> <protocol> <address> <payload> <type>` |
 
 ## DSL Grammar
 

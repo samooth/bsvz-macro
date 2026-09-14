@@ -274,3 +274,96 @@ test "templates: BSV21_DEPLOY is deterministic" {
     const allocator = testing.allocator;
     try helpers.expectDeterministicBytecode(allocator, "BSV21_DEPLOY[\"TOKEN\", 8, 21000000]");
 }
+
+// ── STAS Token Protocol ──────────────────────────────────────────────────
+
+test "templates: STAS_CONTRACT fails simulation (OP_RETURN)" {
+    const allocator = testing.allocator;
+    const issuer_pkh = "aabbccdd00112233445566778899aabbccddeeff";
+    const schema = "name=Test,decimals=8";
+    try helpers.compileExpectError(allocator, "STAS_CONTRACT[\"" ++ issuer_pkh ++ "\", \"" ++ schema ++ "\"]", error.SimError);
+}
+
+test "templates: STAS_CONTRACT rejects short issuer hash" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "STAS_CONTRACT[\"aabb\", \"schema\"]", error.ExpandError);
+}
+
+test "templates: STAS_LOCK fails simulation (OP_RETURN)" {
+    const allocator = testing.allocator;
+    const dest_pkh = "aabbccdd00112233445566778899aabbccddeeff";
+    const redemption_pkh = "1122334455667788990011223344556677889900";
+    try helpers.compileExpectError(allocator, "STAS_LOCK[\"" ++ dest_pkh ++ "\", \"" ++ redemption_pkh ++ "\", \"TEST\", \"\", 0]", error.SimError);
+}
+
+test "templates: STAS_LOCK includes symbol and splittable flag" {
+    const allocator = testing.allocator;
+    const dest_pkh = "aabbccdd00112233445566778899aabbccddeeff";
+    const redemption_pkh = "1122334455667788990011223344556677889900";
+    try helpers.compileExpectError(allocator, "STAS_LOCK[\"" ++ dest_pkh ++ "\", \"" ++ redemption_pkh ++ "\", \"SYM\", \"\", 1]", error.SimError);
+}
+
+test "templates: STAS_SEGMENT produces pushdata" {
+    const allocator = testing.allocator;
+    const pubkey = "02abababababababababababababababababababababababababababababababab";
+    const result = try bsvz_macro.compile(allocator, "STAS_SEGMENT[100, \"" ++ pubkey ++ "\"]", .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.bytecode.len > 0);
+}
+
+test "templates: STAS_SEGMENT rejects short pubkey" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "STAS_SEGMENT[100, \"02ab\"]", error.ExpandError);
+}
+
+test "templates: STAS_FUNDING fails simulation" {
+    const allocator = testing.allocator;
+    const txid = "aabbccdd00112233445566778899aabbccddeeffaabbccdd0011223344556677";
+    try helpers.compileExpectError(allocator, "STAS_FUNDING[0, \"" ++ txid ++ "\"]", error.SimError);
+}
+
+test "templates: STAS_FUNDING rejects short txid" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "STAS_FUNDING[0, \"aabb\"]", error.ExpandError);
+}
+
+test "templates: STAS_UNLOCK_VERSION accepts 0..5" {
+    const allocator = testing.allocator;
+    const result = try bsvz_macro.compile(allocator, "STAS_UNLOCK_VERSION[3]", .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.bytecode.len > 0);
+}
+
+test "templates: STAS_UNLOCK_VERSION rejects out-of-range" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "STAS_UNLOCK_VERSION[6]", error.ExpandError);
+}
+
+test "templates: STAS_PREIMAGE produces pushdata" {
+    const allocator = testing.allocator;
+    const preimage = "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd";
+    const result = try bsvz_macro.compile(allocator, "STAS_PREIMAGE[\"" ++ preimage ++ "\"]", .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.bytecode.len > 0);
+}
+
+test "templates: STAS_SIG produces pushdata" {
+    const allocator = testing.allocator;
+    const sig = "3045022100ababababababababababababababababababababababababab022100cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd01";
+    const result = try bsvz_macro.compile(allocator, "STAS_SIG[\"" ++ sig ++ "\"]", .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.bytecode.len > 0);
+}
+
+test "templates: STAS_PUBKEY produces pushdata" {
+    const allocator = testing.allocator;
+    const pubkey = "02abababababababababababababababababababababababababababababababab";
+    const result = try bsvz_macro.compile(allocator, "STAS_PUBKEY[\"" ++ pubkey ++ "\"]", .{});
+    defer result.deinit(allocator);
+
+    try testing.expect(result.bytecode.len > 0);
+}

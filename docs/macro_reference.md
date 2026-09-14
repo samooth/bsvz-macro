@@ -303,6 +303,57 @@ Sigil NFT locking script with project hash, pay-to-pubkey-hash, and metadata.
 - Arity: 3 (string 20-byte hex, string 20-byte hex, string JSON)
 - Expansion: `OP_HASH160 <project_hash> OP_EQUALVERIFY OP_DUP OP_HASH160 <p2pkh_hash> OP_EQUALVERIFY OP_CHECKSIG OP_RETURN <metadata_json>`
 
+### STAS_CONTRACT[issuer_pkh_hex, schema]
+STAS token issuer contract (P2PKH + OP_RETURN schema).
+- Arity: 2 (string 20-byte hex, string)
+- Expansion: `OP_DUP OP_HASH160 <issuer_pkh> OP_EQUALVERIFY OP_CHECKSIG OP_RETURN <schema>`
+
+### STAS_LOCK[dest_pkh_hex, redemption_pkh_hex, symbol, data_hex, is_splittable]
+STAS v2 token locking script with covenant template.
+- Arity: 5 (string 20-byte hex, string 20-byte hex, string, string hex, integer 0|1)
+- Expansion: `<covenant> <splittable_flag> <symbol> [<data>]`
+- Covenant embeds `dest_pkh` and `redemption_pkh` into the STAS v2 binary template.
+
+### STAS_SEGMENT[satoshis, pubkey_hex]
+Unlocking segment: amount + compressed pubkey.
+- Arity: 2 (integer ≥0, string 33-byte hex)
+- Expansion: `<satoshis_push> <pubkey_push>`
+
+### STAS_FUNDING[funding_index, funding_txid_hex]
+Unlocking funding reference: index + reversed txid.
+- Arity: 2 (integer ≥0, string 64-char hex)
+- Expansion: `<index_push> <reversed_txid>`
+
+### STAS_UNLOCK_VERSION[version]
+Unlocking version flag (0–5).
+- Arity: 1 (integer 0–5)
+- Expansion: `<version_push>`
+
+### STAS_PREIMAGE[preimage_hex]
+Push preimage data (hex).
+- Arity: 1 (string even-length hex)
+- Expansion: `<preimage_push>`
+
+### STAS_SIG[sig_hex]
+Push DER signature (hex).
+- Arity: 1 (string even-length hex)
+- Expansion: `<sig_push>`
+
+### STAS_PUBKEY[pubkey_hex]
+Push compressed pubkey (33-byte hex).
+ - Arity: 3 (string 66-char hex)
+ - Expansion: `<pubkey_push>`
+
+### AIP_ENCODE[method, address, payload_hex]
+AIP (Authenticated Identity Protocol) payload encoder.
+- Arity: ≥3 (strings) — first arg is method, second is address, rest are payload fields
+- Expansion: `<AIP_PREFIX> <method> <address> <field1> <field2> ...`
+
+### SIGMA_ENCODE[protocol, address, payload_hex, type]
+SIGMA protocol payload encoder.
+- Arity: ≥4 (strings/integers) — first arg is protocol, second is address, rest are payload fields (integers converted to decimal strings)
+- Expansion: `<SIGMA_PREFIX> <protocol> <address> <field1> <field2> ...`
+
 ## DSL Syntax
 
 ```
