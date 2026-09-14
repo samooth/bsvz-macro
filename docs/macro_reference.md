@@ -208,6 +208,96 @@ Note: the covenant suffixes use deliberately non-minimal pushes (bare
 not `minimaldata`-clean; compile with `enforce_standardness = false` if
 policy validation rejects them.
 
+## Template Macros
+
+High-level protocol macros that emit standard BSV inscription and data-push
+bytecode. These encode application-layer protocols (ordinals, tokens, name
+services, large-file concatenation) inside data pushes and are **not** part of
+the canonical stack-machine layer.
+
+### INSCRIPTION[content, content_type]
+Standard 1Sat ordinal inscription envelope.
+- Arity: 2 (string, string)
+- Expansion: `OP_0 OP_IF "ord" OP_1 <content_type> OP_0 <content> OP_ENDIF`
+
+### INSCRIPTION_FULL[prefix_hex, content_type, suffix_hex, marker_hex]
+Custom inscription with explicit prefix/suffix/marker bytes.
+- Arity: 4 (string, string, string, string) — all even-length hex
+- Expansion: `<prefix> OP_0 OP_IF "ord" OP_1 <content_type> OP_0 OP_RETURN <suffix> <marker>`
+
+### LOCK[pkh_hex, block_height]
+CLTV time-locked pay-to-pubkey-hash lock.
+- Arity: 2 (string 20-byte hex, integer)
+- Expansion: `<block_height> OP_CHECKLOCKTIMEVERIFY OP_DROP OP_DUP OP_HASH160 <20B-pkh> OP_EQUALVERIFY OP_CHECKSIG`
+
+### BSV21_DEPLOY[symbol, decimals, max_supply]
+Deploy a BSV-21 token with deploy+mint inscription.
+- Arity: 3 (string ≤32 chars, integer 0-18, integer >0)
+- Expansion: `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"deploy+mint","sym":"<symbol>","amt":"<max_supply>","dec":"<decimals>"} OP_ENDIF`
+
+### BSV21_TRANSFER[token_id, amount]
+Transfer a BSV-21 token balance.
+- Arity: 2 (string, integer >0)
+- Expansion: `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"transfer","id":"<token_id>","amt":"<amount>"} OP_ENDIF`
+
+### BSV21_BURN[token_id, amount]
+Burn a BSV-21 token balance.
+- Arity: 2 (string, integer >0)
+- Expansion: `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"burn","id":"<token_id>","amt":"<amount>"} OP_ENDIF`
+
+### BSV20_DEPLOY[tick, max_supply, decimals, mint_limit]
+Deploy a BSV-20 token (deprecated; use BSV-21 for new tokens).
+- Arity: 4 (string, integer >0, integer 0-18, integer ≥0)
+- Expansion: `OP_0 OP_IF "ord" OP_1 {"p":"bsv-20","op":"deploy","tick":"<tick>","max":"<max_supply>","lim":"<mint_limit>","dec":"<decimals>"} OP_ENDIF`
+
+### BSV20_MINT[tick, amount]
+Mint BSV-20 tokens (deprecated).
+- Arity: 2 (string, integer >0)
+
+### BSV20_TRANSFER[tick, amount]
+Transfer BSV-20 tokens (deprecated).
+- Arity: 2 (string, integer >0)
+
+### MAP_SET[key, value]
+Write a key-value pair to the MAP protocol (OP_RETURN).
+- Arity: 2 (string, string)
+- Expansion: `OP_RETURN <MAP_PREFIX> "SET" <key> <value>`
+
+### MAP_DEL[key]
+Delete a key from the MAP protocol (OP_RETURN).
+- Arity: 1 (string)
+- Expansion: `OP_RETURN <MAP_PREFIX> "DEL" <key>`
+
+### ORDLOCK[seller_pkh_hex, pay_pkh_hex, price_sats]
+Ordinal Lock covenant (timelocked refund + atomic swap payload).
+- Arity: 3 (string 20-byte hex, string 20-byte hex, integer)
+- Expansion: `<ORDLOCK_PREFIX> <seller_pkh> <payout_script> <ORDLOCK_SUFFIX>`
+
+### B_ENCODE[content_hex, content_type, encoding, filename]
+B:// protocol data embedding (OP_RETURN).
+- Arity: 4 (string, string, string, string)
+- Expansion: `OP_RETURN <B_PREFIX> <content> <content_type> <encoding> <filename>`
+
+### OPNS_LOCK[claimed_hex, domain, pow_hex]
+OpNS name-claim covenant (mine-tree contract with embedded bytecode).
+- Arity: 3 (string, string, string) — claimed and pow are even-length hex
+- Expansion: `<OPNS_CONTRACT> OP_RETURN OP_0 <genesis_outpoint> <claimed> <domain> <pow> <state_len>`
+
+### OPNS_INSCRIBE[name, owner_script_hex]
+OpNS 1Sat ordinal name inscription.
+- Arity: 2 (string, string)
+- Expansion: `<owner_script> OP_0 OP_IF "ord" OP_1 "application/op-ns" OP_0 <name> OP_ENDIF OP_RETURN "1opNS..." <genesis_outpoint>`
+
+### BCAT_HEADER[info, mime, charset, filename, flag, txids_hex]
+Bcat header transaction (concatenation index).
+- Arity: 6 (string ≤128, string ≤128, string ≤16, string ≤256, string ≤16, string) — txids_hex is 64×N chars
+- Expansion: `OP_RETURN <BCAT_NAMESPACE> <info> <mime> <charset> <filename> <flag> <TX1> <TX2> ...`
+
+### BCAT_PART[data_hex]
+Bcat part transaction (raw file chunk).
+- Arity: 1 (string, even-length hex)
+- Expansion: `OP_RETURN <BCAT_PART_NAMESPACE> <raw_data>`
+
 ## DSL Syntax
 
 ```

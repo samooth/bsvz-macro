@@ -37,6 +37,14 @@ zig build test -Doptimize=ReleaseSafe   # safety checks + stack traces
   `@import` it from the test file that needs it.
 - After editing test files, run `zig build test` and confirm exit 0 before
   considering work done.
+- **Test runner `--listen=-` workaround**: Zig 0.16.0 dev builds inject
+  `--listen=-` into every test binary via `lib/std/Build/Step/Compile.zig`.
+  In environments where the compiler-server pipe closes prematurely (e.g.
+  coding-chat terminal multiplexer), the runner panics with
+  `internal test runner failure: EndOfStream`. This repo replaces
+  `b.addRunArtifact(test)` with a custom `addTestStep` helper in
+  `build.zig` that builds a `Step.Run` manually **without** `--listen=-`.
+  This keeps `zig build test` green without patching Zig.
 
 ## Adding tests (preferred patterns)
 - Use the helpers in `tests/helpers.zig`: `compileDefault`, `compileWith`,

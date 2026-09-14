@@ -1,5 +1,12 @@
 const std = @import("std");
 
+fn addTestStep(b: *std.Build, test_compile: *std.Build.Step.Compile) *std.Build.Step.Run {
+    const run_step = std.Build.Step.Run.create(b, b.fmt("run test {s}", .{test_compile.name}));
+    run_step.producer = test_compile;
+    run_step.addArtifactArg(test_compile);
+    return run_step;
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -91,7 +98,7 @@ pub fn build(b: *std.Build) void {
      const main_tests = b.addTest(.{
          .root_module = macro_mod,
      });
-     const run_main_tests = b.addRunArtifact(main_tests);
+     const run_main_tests = addTestStep(b, main_tests);
      test_step.dependOn(&run_main_tests.step);
 
      // E2E tests
@@ -105,7 +112,7 @@ pub fn build(b: *std.Build) void {
      const e2e_tests = b.addTest(.{
          .root_module = e2e_test_module,
      });
-     const run_e2e_tests = b.addRunArtifact(e2e_tests);
+     const run_e2e_tests = addTestStep(b, e2e_tests);
      test_step.dependOn(&run_e2e_tests.step);
 
      // Canonical tests
@@ -119,7 +126,7 @@ pub fn build(b: *std.Build) void {
      const canon_tests = b.addTest(.{
          .root_module = canon_test_module,
      });
-     const run_canon_tests = b.addRunArtifact(canon_tests);
+     const run_canon_tests = addTestStep(b, canon_tests);
      test_step.dependOn(&run_canon_tests.step);
 
      // Stack sim tests
@@ -133,7 +140,7 @@ pub fn build(b: *std.Build) void {
      const sim_tests = b.addTest(.{
          .root_module = sim_test_module,
      });
-     const run_sim_tests = b.addRunArtifact(sim_tests);
+     const run_sim_tests = addTestStep(b, sim_tests);
      test_step.dependOn(&run_sim_tests.step);
 
      // Negative tests
@@ -147,7 +154,7 @@ pub fn build(b: *std.Build) void {
      const neg_tests = b.addTest(.{
          .root_module = neg_test_module,
      });
-     const run_neg_tests = b.addRunArtifact(neg_tests);
+     const run_neg_tests = addTestStep(b, neg_tests);
      test_step.dependOn(&run_neg_tests.step);
 
      // Validator tests
@@ -161,7 +168,7 @@ pub fn build(b: *std.Build) void {
      const val_tests = b.addTest(.{
          .root_module = val_test_module,
      });
-     const run_val_tests = b.addRunArtifact(val_tests);
+     const run_val_tests = addTestStep(b, val_tests);
      test_step.dependOn(&run_val_tests.step);
 
      // Simulator tests
@@ -175,7 +182,7 @@ pub fn build(b: *std.Build) void {
      const sim2_tests = b.addTest(.{
          .root_module = sim2_test_module,
      });
-     const run_sim2_tests = b.addRunArtifact(sim2_tests);
+     const run_sim2_tests = addTestStep(b, sim2_tests);
      test_step.dependOn(&run_sim2_tests.step);
 
      // Expander tests
@@ -189,7 +196,7 @@ pub fn build(b: *std.Build) void {
      const exp_tests = b.addTest(.{
          .root_module = exp_test_module,
      });
-     const run_exp_tests = b.addRunArtifact(exp_tests);
+     const run_exp_tests = addTestStep(b, exp_tests);
      test_step.dependOn(&run_exp_tests.step);
 
      // Lexer tests
@@ -203,7 +210,7 @@ pub fn build(b: *std.Build) void {
      const lex_tests = b.addTest(.{
          .root_module = lex_test_module,
      });
-     const run_lex_tests = b.addRunArtifact(lex_tests);
+     const run_lex_tests = addTestStep(b, lex_tests);
      test_step.dependOn(&run_lex_tests.step);
 
      // Parser tests
@@ -217,7 +224,7 @@ pub fn build(b: *std.Build) void {
      const parse_tests = b.addTest(.{
          .root_module = parse_test_module,
      });
-     const run_parse_tests = b.addRunArtifact(parse_tests);
+     const run_parse_tests = addTestStep(b, parse_tests);
      test_step.dependOn(&run_parse_tests.step);
 
      // Test helpers (contains tests for the helpers themselves)
@@ -231,7 +238,7 @@ pub fn build(b: *std.Build) void {
      const helpers_tests = b.addTest(.{
          .root_module = helpers_test_module,
      });
-     const run_helpers_tests = b.addRunArtifact(helpers_tests);
+     const run_helpers_tests = addTestStep(b, helpers_tests);
      test_step.dependOn(&run_helpers_tests.step);
 
      // Test data builders (contains tests for the builders)
@@ -245,7 +252,7 @@ pub fn build(b: *std.Build) void {
      const test_data_tests = b.addTest(.{
          .root_module = test_data_test_module,
      });
-     const run_test_data_tests = b.addRunArtifact(test_data_tests);
+     const run_test_data_tests = addTestStep(b, test_data_tests);
      test_step.dependOn(&run_test_data_tests.step);
 
      // Property-based tests
@@ -259,7 +266,7 @@ pub fn build(b: *std.Build) void {
      const prop_tests = b.addTest(.{
          .root_module = prop_test_module,
      });
-     const run_prop_tests = b.addRunArtifact(prop_tests);
+     const run_prop_tests = addTestStep(b, prop_tests);
      test_step.dependOn(&run_prop_tests.step);
 
      // Benchmark tests
@@ -274,7 +281,7 @@ pub fn build(b: *std.Build) void {
      const bench_tests = b.addTest(.{
          .root_module = bench_test_module,
      });
-     const run_bench_tests = b.addRunArtifact(bench_tests);
+     const run_bench_tests = addTestStep(b, bench_tests);
      test_step.dependOn(&run_bench_tests.step);
 
     // Example tests using helpers (demonstrates helper value)
@@ -288,7 +295,7 @@ pub fn build(b: *std.Build) void {
     const examples_tests = b.addTest(.{
         .root_module = examples_test_module,
     });
-    const run_examples_tests = b.addRunArtifact(examples_tests);
+    const run_examples_tests = addTestStep(b, examples_tests);
     test_step.dependOn(&run_examples_tests.step);
 
     // Script-engine integration tests (bsvz ScriptEngine wiring smoke test)
@@ -302,7 +309,7 @@ pub fn build(b: *std.Build) void {
     const script_engine_tests = b.addTest(.{
         .root_module = script_engine_test_module,
     });
-    const run_script_engine_tests = b.addRunArtifact(script_engine_tests);
+    const run_script_engine_tests = addTestStep(b, script_engine_tests);
     test_step.dependOn(&run_script_engine_tests.step);
 
     // WP1605 §1.4 FAST pair + pubkey-injection tests
@@ -316,7 +323,7 @@ pub fn build(b: *std.Build) void {
     const pushtx_fast_tests = b.addTest(.{
         .root_module = pushtx_fast_test_module,
     });
-    const run_pushtx_fast_tests = b.addRunArtifact(pushtx_fast_tests);
+    const run_pushtx_fast_tests = addTestStep(b, pushtx_fast_tests);
     test_step.dependOn(&run_pushtx_fast_tests.step);
 
     // Diagnostics tests (compileWithDiagnostics + SourceLocation)
@@ -330,7 +337,7 @@ pub fn build(b: *std.Build) void {
     const diagnostics_tests = b.addTest(.{
         .root_module = diagnostics_test_module,
     });
-    const run_diagnostics_tests = b.addRunArtifact(diagnostics_tests);
+    const run_diagnostics_tests = addTestStep(b, diagnostics_tests);
     test_step.dependOn(&run_diagnostics_tests.step);
 
     // User-defined macro tests (MacroTable + registerMacro)
@@ -344,7 +351,7 @@ pub fn build(b: *std.Build) void {
     const user_macros_tests = b.addTest(.{
         .root_module = user_macros_test_module,
     });
-    const run_user_macros_tests = b.addRunArtifact(user_macros_tests);
+    const run_user_macros_tests = addTestStep(b, user_macros_tests);
     test_step.dependOn(&run_user_macros_tests.step);
 
      // Bridge tests (P2PKH/P2SH/PELS output helpers)
@@ -358,7 +365,7 @@ pub fn build(b: *std.Build) void {
      const bridge_tests = b.addTest(.{
          .root_module = bridge_test_module,
      });
-     const run_bridge_tests = b.addRunArtifact(bridge_tests);
+     const run_bridge_tests = addTestStep(b, bridge_tests);
      test_step.dependOn(&run_bridge_tests.step);
 
      // Flags system tests (eras, @has, @limit, @network, @standardness,
@@ -373,7 +380,7 @@ pub fn build(b: *std.Build) void {
      const flags_tests = b.addTest(.{
          .root_module = flags_test_module,
      });
-     const run_flags_tests = b.addRunArtifact(flags_tests);
+     const run_flags_tests = addTestStep(b, flags_tests);
      test_step.dependOn(&run_flags_tests.step);
 
      // BOLT (b017) port tests — golden suffix hashes + composed lock layouts
@@ -387,6 +394,20 @@ pub fn build(b: *std.Build) void {
      const bolt_port_tests = b.addTest(.{
          .root_module = bolt_port_test_module,
      });
-     const run_bolt_port_tests = b.addRunArtifact(bolt_port_tests);
-     test_step.dependOn(&run_bolt_port_tests.step);
+      const run_bolt_port_tests = addTestStep(b, bolt_port_tests);
+      test_step.dependOn(&run_bolt_port_tests.step);
+
+      // Template macros tests (inscription, lock, bsv21, map, ordlock, b, opns, aip, sigma)
+      const templates_test_module = b.createModule(.{
+          .root_source_file = b.path("tests/templates_tests.zig"),
+          .target = target,
+          .optimize = optimize,
+      });
+      templates_test_module.addImport("bsvz-macro", macro_mod);
+      templates_test_module.addImport("bsvz", bsvz_mod);
+      const templates_tests = b.addTest(.{
+          .root_module = templates_test_module,
+      });
+      const run_templates_tests = addTestStep(b, templates_tests);
+      test_step.dependOn(&run_templates_tests.step);
 }

@@ -9,6 +9,7 @@ pub const bolt = @import("bolt.zig");
 pub const simulator = @import("simulator/engine.zig");
 pub const validator = @import("validator/bounds.zig");
 pub const encoder = @import("encoder/hex.zig");
+pub const templates = @import("templates.zig");
 
 pub const MacroTable = @import("expander/table.zig").MacroTable;
 pub const MacroDefinition = @import("expander/table.zig").MacroDefinition;
@@ -185,6 +186,7 @@ fn compileInternal(
     if (custom_table == null) {
         prelude.registerCanonicalMacros(&table) catch return MacroError.ExpandError;
         bolt.registerBoltMacros(&table) catch return MacroError.ExpandError;
+        @import("templates.zig").registerTemplateMacros(&table) catch return MacroError.ExpandError;
     }
 
     // Phase 4: Expand
