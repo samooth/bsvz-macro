@@ -734,6 +734,41 @@ fn bcatPartExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]
     return out.toOwnedSlice(allocator);
 }
 
+fn sigilNftExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
+    _ = body;
+    _ = table;
+    if (args.len != 3) return ExpandError.ArityMismatch;
+    if (args[0] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[1] != .string_literal) return ExpandError.TypeMismatch;
+    if (args[2] != .string_literal) return ExpandError.TypeMismatch;
+
+    const project_hash_hex = args[0].string_literal;
+    const project_hash = try decodeHexOwned(allocator, project_hash_hex, 20);
+    defer allocator.free(project_hash);
+
+    const p2pkh_hash_hex = args[1].string_literal;
+    const p2pkh_hash = try decodeHexOwned(allocator, p2pkh_hash_hex, 20);
+    defer allocator.free(p2pkh_hash);
+
+    const metadata = args[2].string_literal;
+
+    var out: std.ArrayListUnmanaged(u8) = .empty;
+    defer out.deinit(allocator);
+
+    try emitOpcode(&out, allocator, Opcode.OP_HASH160);
+    try emitPushData(&out, allocator, project_hash);
+    try emitOpcode(&out, allocator, Opcode.OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, Opcode.OP_DUP);
+    try emitOpcode(&out, allocator, Opcode.OP_HASH160);
+    try emitPushData(&out, allocator, p2pkh_hash);
+    try emitOpcode(&out, allocator, Opcode.OP_EQUALVERIFY);
+    try emitOpcode(&out, allocator, Opcode.OP_CHECKSIG);
+    try emitOpcode(&out, allocator, Opcode.OP_RETURN);
+    try emitPushData(&out, allocator, metadata);
+
+    return out.toOwnedSlice(allocator);
+}
+
 // ── AIP ─────────────────────────────────────────────────────────────────
 
 fn aipEncodeExpand(allocator: std.mem.Allocator, args: []const AstNode, body: ?[]const AstNode, table: *const MacroTable) ExpandError![]const u8 {
@@ -868,6 +903,11 @@ pub fn registerTemplateMacros(table: *MacroTable) !void {
         .arity = 1,
         .param_types = &.{.string},
         .expand_fn = bcatPartExpand,
+    });
+    try table.register("SIGIL_NFT", .{
+        .arity = 3,
+        .param_types = &.{ .string, .string, .string },
+        .expand_fn = sigilNftExpand,
     });
     try table.register("AIP_ENCODE", .{
         .arity = 3,

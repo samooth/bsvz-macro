@@ -207,6 +207,27 @@ test "templates: BCAT_PART rejects empty data" {
     try helpers.compileExpectError(allocator, "BCAT_PART[\"\"]", error.ExpandError);
 }
 
+// ── Sigil ────────────────────────────────────────────────────────────────
+
+test "templates: SIGIL_NFT produces valid script" {
+    const allocator = testing.allocator;
+    const project = "fadc8a4cb774ab05d31c5e5d03ec6c96290180b6";
+    const p2pkh = "addfef217aed96c298b4c9ae35779d7489bed83f";
+    const metadata = "Slur Juice #262 - dark corner of space and time";
+    const result = bsvz_macro.compile(allocator, "SIGIL_NFT[\"0x" ++ project ++ "\", \"0x" ++ p2pkh ++ "\", \"" ++ metadata ++ "\"]", .{});
+    try testing.expectError(error.SimError, result);
+}
+
+test "templates: SIGIL_NFT rejects short project hash" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "SIGIL_NFT[\"0xabab\", \"0xaddfef217aed96c298b4c9ae35779d7489bed83f\", \"metadata\"]", error.ExpandError);
+}
+
+test "templates: SIGIL_NFT rejects short p2pkh hash" {
+    const allocator = testing.allocator;
+    try helpers.compileExpectError(allocator, "SIGIL_NFT[\"0xfadc8a4cb774ab05d31c5e5d03ec6c96290180b6\", \"0xabab\", \"metadata\"]", error.ExpandError);
+}
+
 // ── AIP ─────────────────────────────────────────────────────────────────
 
 test "templates: AIP_ENCODE produces valid script bytes" {

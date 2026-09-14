@@ -298,6 +298,11 @@ Bcat part transaction (raw file chunk).
 - Arity: 1 (string, even-length hex)
 - Expansion: `OP_RETURN <BCAT_PART_NAMESPACE> <raw_data>`
 
+### SIGIL_NFT[project_hash_hex, p2pkh_hash_hex, metadata_json]
+Sigil NFT locking script with project hash, pay-to-pubkey-hash, and metadata.
+- Arity: 3 (string 20-byte hex, string 20-byte hex, string JSON)
+- Expansion: `OP_HASH160 <project_hash> OP_EQUALVERIFY OP_DUP OP_HASH160 <p2pkh_hash> OP_EQUALVERIFY OP_CHECKSIG OP_RETURN <metadata_json>`
+
 ## DSL Syntax
 
 ```
